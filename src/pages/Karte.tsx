@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import FilterBar from '../components/FilterBar';
 import { filtern, useObjektFilter } from '../lib/filter';
 import { useObjekte } from '../hooks/useObjekte';
+import { dateTime } from '../lib/format';
 import { useApp } from '../state/AppContext';
 import Karte from '../components/KarteLazy';
 import { phasenFarbe, zuKartenpunkt } from '../lib/kartenpunkte';
@@ -9,7 +10,7 @@ import type { KartenPunkt } from '../components/Karte';
 
 export default function KartePage() {
   const { me, haushalt } = useApp();
-  const { objekte, loading, geoOffen } = useObjekte();
+  const { objekte, loading, geoOffen, offlineStand } = useObjekte();
   const [filter, setFilter] = useObjektFilter('karte');
   const nav = useNavigate();
 
@@ -23,6 +24,7 @@ export default function KartePage() {
 
   return (
     <>
+      {offlineStand !== null ? <div className="notice">Keine Verbindung. Daten vom Stand {dateTime(offlineStand)}.</div> : null}
       <div className="page-head">
         <div>
           <h1>Karte</h1>

@@ -20,19 +20,42 @@ function brauchtBild(o: ObjektUebersicht): boolean {
   return o.bild_url !== null || direktQuelle(o.quellen) !== null;
 }
 
+const CACHE_KEY = 'rs.cache.objekte';
+
+function cacheLesen(): { daten: ObjektUebersicht[]; stand: string } | null {
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY);
+    if (raw === null) { return null; }
+    const v = JSON.parse(raw) as { daten: ObjektUebersicht[]; stand: string };
+    return Array.isArray(v.daten) ? v : null;
+  } catch { return null; }
+}
+
 export function useObjekte() {
-  const [objekte, setObjekte] = useState<ObjektUebersicht[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [objekte, setObjekte] = useState<ObjektUebersicht[]>(() => { const c = cacheLesen(); return c !== null ? c.daten : []; });
+  const [loading, setLoading] = useState(() => cacheLesen() === null);
   const [error, setError] = useState<string | null>(null);
+  const [offlineStand, setOfflineStand] = useState<string | null>(null);
   const [geoOffen, setGeoOffen] = useState(0);
 
   const reload = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('v_objekte_uebersicht')
-      .select('*')
-      .order('erstmals_gesehen', { ascending: false })
-      .order('created_at', { ascending: false });
-    if (err) { setError(err.message); } else if (data) { setObjekte(data as ObjektUebersicht[]); setError(null); }
+    let data: ObjektUebersicht[] | null = null;
+    let errText: string | null = null;
+    try {
+      const r = await supabase
+        .from('v_objekte_uebersicht')
+        .select('*')
+        .order('erstmals_gesehen', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (r.error) { errText = r.error.message; } else { data = r.data as ObjektUebersicht[]; }
+    } catch (e) { errText = String(e); }
+    if (data !== null) {
+      setObjekte(data); setError(null); setOfflineStand(null);
+      try { window.localStorage.setItem(CACHE_KEY, JSON.stringify({ daten: data, stand: new Date().toISOString() })); } catch { /* voll oder privat */ }
+    } else {
+      const c = cacheLesen();
+      if (c !== null) { setObjekte(c.daten); setOfflineStand(c.stand); setError(null); } else { setError(errText); }
+    }
     setLoading(false);
   }, []);
 
@@ -77,5 +100,5 @@ export function useObjekte() {
     });
   }, [loading, objekte, reload]);
 
-  return { objekte, loading, error, reload, geoOffen };
+  return { objekte, loading, error, reload, geoOffen, offlineStand };
 }

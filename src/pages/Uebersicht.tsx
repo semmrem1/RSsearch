@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { useObjekte } from '../hooks/useObjekte';
+import { dateTime } from '../lib/format';
 import ObjektTable from '../components/ObjektTable';
 import ObjektForm from '../components/ObjektForm';
 import FilterBar from '../components/FilterBar';
@@ -14,7 +15,7 @@ interface FeedItem { key: string; when: string; kind: string; cls: string; title
 
 export default function Uebersicht() {
   const { profiles, me, haushalt } = useApp();
-  const { objekte, loading, reload } = useObjekte();
+  const { objekte, loading, reload, offlineStand } = useObjekte();
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const [todos, setTodos] = useState<Aktivitaet[]>([]);
   const [filter, setFilter] = useObjektFilter('uebersicht');
@@ -71,6 +72,7 @@ export default function Uebersicht() {
 
   return (
     <>
+      {offlineStand !== null ? <div className="notice">Keine Verbindung. Daten vom Stand {dateTime(offlineStand)}.</div> : null}
       <div className="page-head">
         <div>
           <h1>Übersicht</h1>

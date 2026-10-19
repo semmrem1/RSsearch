@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useObjekte } from '../hooks/useObjekte';
+import { dateTime } from '../lib/format';
 import { useApp } from '../state/AppContext';
 import ObjektTable from '../components/ObjektTable';
 import ObjektForm from '../components/ObjektForm';
@@ -9,7 +10,7 @@ import { filtern, useObjektFilter } from '../lib/filter';
 
 export default function Inserate() {
   const { me, haushalt } = useApp();
-  const { objekte, loading, reload } = useObjekte();
+  const { objekte, loading, reload, offlineStand } = useObjekte();
   const [filter, setFilter] = useObjektFilter('inserate');
   const [showForm, setShowForm] = useState(false);
   const nav = useNavigate();
@@ -17,6 +18,7 @@ export default function Inserate() {
 
   return (
     <>
+      {offlineStand !== null ? <div className="notice">Keine Verbindung. Daten vom Stand {dateTime(offlineStand)}.</div> : null}
       <div className="page-head">
         <div>
           <h1>Inserate</h1>
