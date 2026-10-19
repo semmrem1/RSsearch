@@ -66,14 +66,14 @@ export function useObjekte() {
     return () => { abgebrochen = true; setGeoOffen(0); };
   }, [loading, objekte.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fehlende Bilder serverseitig sichern lassen (einmal pro Session)
+  // Fehlende Haupt- und Galeriebilder serverseitig sichern lassen (einmal pro Session)
   useEffect(() => {
-    if (loading || bildLaufGestartet) { return; }
-    if (!objekte.some(brauchtBild)) { return; }
+    if (loading || bildLaufGestartet || objekte.length === 0) { return; }
     bildLaufGestartet = true;
-    supabase.functions.invoke('bild-sichern', { body: {} }).then(({ data }) => {
-      const res = data as { gesichert?: number } | null;
-      if (res !== null && res.gesichert !== undefined && res.gesichert > 0) { reload(); }
+    const brauchtHaupt = objekte.some(brauchtBild);
+    supabase.functions.invoke('bild-sichern', { body: { limit: brauchtHaupt ? 20 : 10 } }).then(({ data }) => {
+      const res = data as { gesichert?: number; galerie_gesichert?: number } | null;
+      if (res !== null && ((res.gesichert || 0) > 0 || (res.galerie_gesichert || 0) > 0)) { reload(); }
     });
   }, [loading, objekte, reload]);
 

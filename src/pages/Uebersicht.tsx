@@ -6,7 +6,7 @@ import { useObjekte } from '../hooks/useObjekte';
 import ObjektTable from '../components/ObjektTable';
 import ObjektForm from '../components/ObjektForm';
 import FilterBar from '../components/FilterBar';
-import { filtern, useObjektFilter } from '../lib/filter';
+import { filtern, uneinig, useObjektFilter } from '../lib/filter';
 import { chf, pct, dateShort, relative, dow, dayNum, isToday } from '../lib/format';
 import type { Aktivitaet, Snapshot } from '../lib/types';
 
@@ -67,6 +67,7 @@ export default function Uebersicht() {
     });
 
   const filtered = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
+  const uneinige = objekte.filter((o) => o.stufe_phase !== 9 && uneinig(o));
 
   return (
     <>
@@ -129,6 +130,19 @@ export default function Uebersicht() {
           </div>
         </section>
       </div>
+
+      {uneinige.length > 0 ? (
+        <section className="card pad" aria-labelledby="uneinig-h">
+          <div className="card-head"><h2 id="uneinig-h">Uneinig ({uneinige.length})</h2><span className="small muted">Ihr bewertet diese Objekte deutlich unterschiedlich</span></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            {uneinige.map((o) => (
+              <Link key={o.id} to={'/inserate/' + o.id} className="chip outline" style={{ padding: '8px 10px' }}>
+                {o.ort}{o.adresse ? ', ' + o.adresse : ''} · {profiles.map((p) => { const s = o.kriterien_scores[p.id]; const b = o.bewertungen[p.id]; return p.kuerzel + ' ' + (s !== undefined ? Number(s).toFixed(1) : b ? b.sterne + '★' : '–'); }).join(' / ')}
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="card" aria-labelledby="list-h">
         <div className="card-head list-head">

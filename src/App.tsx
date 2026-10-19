@@ -11,6 +11,8 @@ import Inserate from './pages/Inserate';
 import Detail from './pages/Detail';
 import Dokumente from './pages/Dokumente';
 import KartePage from './pages/Karte';
+import Einstellungen from './pages/Einstellungen';
+import Lauf from './pages/Lauf';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -33,6 +35,8 @@ export default function App() {
           <Route path="/inserate" element={<Inserate />} />
           <Route path="/inserate/:id" element={<Detail />} />
           <Route path="/karte" element={<KartePage />} />
+          <Route path="/einstellungen" element={<Einstellungen />} />
+          <Route path="/lauf" element={<Lauf />} />
           <Route path="/dokumente" element={<Dokumente />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

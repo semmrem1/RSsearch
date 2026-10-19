@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import type { Kriterium, KriterienBewertung } from '../lib/types';
@@ -51,7 +51,7 @@ export default function KriterienGrid({ objektId, onChange }: { objektId: string
   })();
 
   return (
-    <div className="krit">
+    <div className="krit" style={{ '--personen': String(profiles.length) } as CSSProperties}>
       <div className="krit-kopf">
         <span className="small muted">Kriterium</span>
         {profiles.map((p) => <span key={p.id} className="small" style={{ color: p.farbe, fontWeight: 600, textAlign: 'center' }}>{p.name.split(' ')[0]}{me !== null && me.id === p.id ? ' (ich)' : ''}</span>)}

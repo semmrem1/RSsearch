@@ -54,7 +54,7 @@ button { cursor: pointer; }
 .nav { display: flex; flex-wrap: wrap; gap: 4px; }
 .nav a { padding: 10px 14px; border-radius: 8px; color: var(--ink-2); text-decoration: none; }
 .nav a.active { background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
-.header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .run-status { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 13px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .avatars { display: flex; gap: 6px; }
@@ -376,4 +376,7 @@ mark.erwaehnung { background: var(--accent-soft); color: var(--accent-dark); bor
   .krit-werte { justify-content: flex-start; }
   .krit-btn { width: 40px; height: 40px; font-size: 14px; }
   .galerie-thumb { flex-basis: 120px; height: 86px; }
+}
+@media (max-width: 720px) {
+  .header-right .run-status { display: none; }
 }
