@@ -208,15 +208,24 @@ drop trigger if exists objekte_set_updated_at on public.objekte;
 create trigger objekte_set_updated_at before update on public.objekte
 for each row execute function public.set_updated_at();
 
+create or replace function public.objekte_after_insert()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.snapshots (objekt_id, typ, neu, kommentar)
+  values (new.id, 'erfasst', new.preis_chf::text, coalesce(new.ort, '') || ' · ' || coalesce(new.zimmer::text, '?') || ' Zi · ' || coalesce(new.flaeche_m2::text, '?') || ' m²');
+  return new;
+end $$;
+
+drop trigger if exists objekte_after_insert on public.objekte;
+create trigger objekte_after_insert after insert on public.objekte
+for each row execute function public.objekte_after_insert();
+
 create or replace function public.objekte_track_changes()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
-    insert into public.snapshots (objekt_id, typ, neu, kommentar)
-    values (new.id, 'erfasst', new.preis_chf::text, coalesce(new.ort, '') || ' · ' || coalesce(new.zimmer::text, '?') || ' Zi · ' || coalesce(new.flaeche_m2::text, '?') || ' m²');
     return new;
   end if;
-
   if new.preis_chf is distinct from old.preis_chf then
     insert into public.snapshots (objekt_id, typ, alt, neu)
     values (new.id, 'preis', old.preis_chf::text, new.preis_chf::text);
