@@ -35,7 +35,7 @@ export default function Uebersicht() {
   const since = new Date(); since.setDate(since.getDate() - 7);
   const sinceIso = since.toISOString();
   const aktiv = objekte.filter((o) => o.markt_status === 'aktiv');
-  const neuHeute = objekte.filter((o) => isToday(o.erstmals_gesehen) || isToday(o.created_at)).length;
+  const neuHeute = objekte.filter((o) => isToday(o.erstmals_gesehen)).length;
   const preisAenderungen = snaps.filter((s) => s.typ === 'preis' && s.datum >= sinceIso);
   const imProzess = objekte.filter((o) => o.stufe_phase >= 2 && o.stufe_phase <= 5).length;
   const besichtigungen = objekte.filter((o) => o.stufe_code === 'besichtigung_geplant').length;
