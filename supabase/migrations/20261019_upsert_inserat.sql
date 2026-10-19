@@ -100,3 +100,15 @@ begin
   get diagnostics n = row_count;
   return n;
 end $$;
+
+-- Härtung: Definer-Funktionen nicht für anon, Trigger-Funktionen für niemanden via API
+revoke execute on function public.upsert_inserat(text,text,text,text,text,text,numeric,int,bigint,date,text,text,text) from anon, public;
+revoke execute on function public.markiere_offline(text,date) from anon, public;
+revoke execute on function public.bewertung_vormerken() from anon, authenticated, public;
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
+revoke execute on function public.objekte_after_insert() from anon, authenticated, public;
+revoke execute on function public.objekte_track_changes() from anon, authenticated, public;
+revoke execute on function public.set_updated_at() from anon, authenticated, public;
+alter function public.set_updated_at() set search_path = public;
+grant execute on function public.upsert_inserat(text,text,text,text,text,text,numeric,int,bigint,date,text,text,text) to authenticated, service_role;
+grant execute on function public.markiere_offline(text,date) to authenticated, service_role;
