@@ -6,7 +6,7 @@ Alle Verbesserungsvorschläge sind umgesetzt und auf `main` gemergt (Cloudflare 
 - Tragbarkeit pro Objekt (Haushalt unter Einstellungen), Tage am Markt, Kriterienkatalog mit Score, «Uneinig»-Abschnitt und Filter
 - Pendelzeit ÖV pro Person (Arbeitsort unter Einstellungen, Edge Function `pendelzeit`), Filter «max. Min»
 - Gemeinde & Steuerfuss 2026 (33 Gemeinden, recherchiert aus kantonalen Listen, Quelle pro Gemeinde; Richterswil nur 2025 belegt, Küsnacht/Oberrieden aus GV-Antrag)
-- Galerie (247 Bild-URLs, Kopie ins Storage läuft über `bilder_sichern()`), MoneyPark-Originalportale als Spiegel-Quellen (42)
+- Galerie (247 Bilder, alle ins Storage kopiert), MoneyPark-Originalportale als Spiegel-Quellen (42)
 - Zusammenführen von Dubletten (ohne delete, Quelle wird ausgeblendet), Exposé-Extraktion (Claude API, Key unter Einstellungen), Kommentare mit @Name und Push an die andere Person
 - Web Push (VAPID; Einstellungen > «Push aktivieren»), Service Worker mit Bild-Cache, Offline-Datencache mit Banner
 - Lärm/Gefahren-Layer auf der Karte, Lauf-Protokoll `/lauf`, Zahnrad im Header
@@ -14,7 +14,7 @@ Alle Verbesserungsvorschläge sind umgesetzt und auf `main` gemergt (Cloudflare 
 
 ## Noch zu tun (nächste Session)
 1. Live-Test der App in Chrome mit echten Daten (Login nötig): Detailseite, Kriterien speichern, Zusammenführen-Modal, Einstellungen > Push aktivieren und Testpush, Arbeitsort setzen, Galerie
-2. `select public.bilder_sichern();` mehrmals ausführen, bis `select count(pfad) from objekt_bilder` = 247 (pro Aufruf 40 Galeriebilder); Fehler in `objekt_bilder.fehler` prüfen
+2. Galerie: alle 247 Bilder sind im Storage (erledigt 19.10., 23:05)
 3. Anthropic API Key unter Einstellungen eintragen, dann ein Exposé-PDF testen
 4. Optional: `steuer_index` (ESTV) ergänzen; Oetwil am See als Gemeinde ergänzen
 5. Mobile-Feinschliff nach echtem Gebrauch (PWA in Chrome neu laden, damit der neue Service Worker v2 greift)
