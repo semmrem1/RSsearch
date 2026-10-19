@@ -7,7 +7,7 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 interface Quelle { url: string | null; url_direkt: boolean; status: string }
@@ -55,7 +55,13 @@ Deno.serve(async (req) => {
 
   const admin = createClient(Deno.env.get('SUPABASE_URL') as string, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string);
   let body: { objekt_id?: string; limit?: number } = {};
-  try { body = await req.json(); } catch { body = {}; }
+  if (req.method === 'POST') {
+    try { body = await req.json(); } catch { body = {}; }
+  } else {
+    const u = new URL(req.url);
+    const l = u.searchParams.get('limit');
+    body = { objekt_id: u.searchParams.get('objekt_id') || undefined, limit: l !== null ? Number(l) : undefined };
+  }
   const limit = Math.min(Math.max(body.limit !== undefined ? body.limit : 15, 1), 40);
 
   let q = admin.from('objekte').select('id, bild_url, bild_fehler, objekt_quellen(url, url_direkt, status)').is('bild_pfad', null);
