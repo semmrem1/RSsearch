@@ -354,7 +354,7 @@ export default function Detail() {
                 <div className="bars">
                   {series.map((p, i) => (
                     <div key={i} className={'bar' + (i === series.length - 1 ? ' cur' : '')}>
-                      <span className="xs tnum" style={{ color: 'var(--ink-2)' }}>{(p.v / 1000000).toFixed(2)} M</span>
+                      <span className="xs tnum" style={{ color: 'var(--ink-2)', textAlign: 'center', lineHeight: 1.2 }}>{(p.v / 1000000).toFixed(2)} M{o.flaeche_m2 ? <><br /><span className="muted">{chf(p.v / o.flaeche_m2)}/m²</span></> : null}</span>
                       <i style={{ height: maxV ? Math.max(8, Math.round((p.v / maxV) * 80)) + '%' : '8%' }} />
                     </div>
                   ))}
@@ -367,7 +367,8 @@ export default function Detail() {
                 {snaps.slice(0, 8).map((s) => {
                   const labels: Record<string, string> = { erfasst: 'Erfasst', preis: 'Preis', status: 'Status', flaeche: 'Fläche', zimmer: 'Zimmer', bestaetigt: 'Bestätigt', neue_quelle: 'Neue Quelle', dublette: 'Dublette', sonstiges: 'Update' };
                   let val = s.kommentar || '';
-                  if (s.typ === 'preis') { val = 'CHF ' + chf(Number(s.alt)) + ' → ' + chf(Number(s.neu)) + ' (' + pct(Number(s.neu) - Number(s.alt), Number(s.alt)) + ')'; }
+                  if (s.typ === 'status') { val = marktText(s.alt || '', null, true) + ' → ' + marktText(s.neu || '', null, true) + (s.neu === 'offline' ? ' · beim Makler nicht mehr gefunden' : s.neu === 'reserviert' ? ' · beim Makler als reserviert markiert' : ''); }
+                  else if (s.typ === 'preis') { val = 'CHF ' + chf(Number(s.alt)) + ' → ' + chf(Number(s.neu)) + ' (' + pct(Number(s.neu) - Number(s.alt), Number(s.alt)) + ')'; }
                   else if (s.typ === 'erfasst') { val = (s.kommentar || '') + (s.neu ? ' · CHF ' + chf(Number(s.neu)) : ''); }
                   else if (s.alt || s.neu) { val = (s.alt || '') + ' → ' + (s.neu || '') + (s.kommentar ? ' · ' + s.kommentar : ''); }
                   return (

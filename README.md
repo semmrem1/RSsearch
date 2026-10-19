@@ -14,6 +14,8 @@ Immobilien-Tracker für die Eigenheimsuche von Remo und Pascale. React + Vite + 
 - Sortierbare Tabelle (Spaltentitel), Filter nach Ortschaft, Markt, Phase und Favoriten auf Übersicht, Inserate und Karte; Filter und Sortierung bleiben im Browser gespeichert
 - Mobile: Inserate als Karten, Ortsfilter als Bottom Sheet, installierbar als PWA (`manifest.webmanifest`, `sw.js` cached nur die App-Shell, Daten kommen immer live)
 - Nicht mehr gefundene Inserate: `markiere_offline` setzt `status = 'offline'` und `offline_seit`, die App zeigt «Offline genommen seit …»; taucht das Inserat wieder auf, wird es automatisch wieder aktiv
+- Tragbarkeit pro Objekt (Haushalt unter Einstellungen: Eigenkapital, Einkommen, kalk. Zins, Nebenkosten, Amortisation), Tage am Markt, Kriterienkatalog (8 Kriterien, 1 bis 5 pro Person, Score), Konflikt-Ansicht «Uneinig», Pendelzeit ÖV zum Arbeitsort pro Person (transport.opendata.ch), Gemeinde und Steuerfuss (Tabelle `gemeinden`, Mapping `ortschaften`)
+- Galerie (bis 5 Bilder pro Inserat, Bucket `objektbilder`), Originalportal bei MoneyPark als Spiegel-Quelle (`objekt_quellen.spiegel_von`), manuelles Zusammenführen von Dubletten (`objekte_zusammenfuehren`, Quelle wird ausgeblendet statt gelöscht), Exposé-Extraktion aus PDF via Claude API (Edge Function `expose-extrahieren`, Key unter Einstellungen), Web Push (VAPID, `push_abos`, Edge Function `push-senden`, aus SQL via `public.push_senden(...)`), Lärm- und Gefahren-Layer auf der Karte (wmts.geo.admin.ch), Lauf-Protokoll unter `/lauf`, Offline-Datencache
 - Direktlink zum Inserat ist Pflicht: `objekt_quellen.url_direkt` erkennt Übersichtsseiten, `upsert_inserat` lehnt sie ab
 
 ## Lokal starten
@@ -30,6 +32,10 @@ npm run dev
 2. Build command: `npm run build`, Build output directory: `dist`
 3. Environment variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
 4. React-Router: Cloudflare Pages liefert bei unbekannten Pfaden automatisch `index.html` aus (SPA-Fallback), keine `_redirects` nötig
+
+## Edge Functions
+
+Siehe `supabase/functions/README.md`. Aufrufe aus SQL laufen über `public.edge_aufruf()` (pg_net, Secret im Vault `app_secret`): `bilder_sichern()`, `pendelzeiten_berechnen()`, `push_senden(...)`.
 
 ## Datenbank
 
