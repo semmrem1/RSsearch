@@ -8,13 +8,18 @@ import ObjektBild from '../components/ObjektBild';
 import Karte from '../components/KarteLazy';
 import { direktQuelle, quelleDirekt } from '../lib/links';
 import { geocode, geoSuchtext } from '../lib/geo';
+import KriterienGrid from '../components/KriterienGrid';
+import Galerie from '../components/Galerie';
+import ZusammenfuehrenModal from '../components/ZusammenfuehrenModal';
+import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
+import type { ExposeExtrakt, Gemeinde } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Bewertung, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
 
 export default function Detail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { me, profiles, stufen, stufeByCode } = useApp();
+  const { me, profiles, stufen, stufeByCode, haushalt } = useApp();
   const [o, setO] = useState<Objekt | null>(null);
   const [quellen, setQuellen] = useState<Quelle[]>([]);
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
@@ -36,6 +41,12 @@ export default function Detail() {
   const [rKomm, setRKomm] = useState('');
   const [rTags, setRTags] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [extrakte, setExtrakte] = useState<ExposeExtrakt[]>([]);
+  const [gemeinde, setGemeinde] = useState<Gemeinde | null>(null);
+  const [extrahiere, setExtrahiere] = useState<string | null>(null);
+  const [zfOffen, setZfOffen] = useState(false);
+  const [galerieVersion] = useState(0);
+  const [hinweis, setHinweis] = useState<string | null>(null);
   const [bildLaedt, setBildLaedt] = useState(false);
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
 
@@ -58,9 +69,26 @@ export default function Detail() {
     setBew((e.data || []) as Bewertung[]);
     setDocs((f.data || []) as Dokument[]);
     setLoc((g.data || []) as Standortfaktor[]);
+    const obj = a.data as Objekt;
+    if (obj.zusammengefuehrt_in) { return; }
+    const [ex, gm] = await Promise.all([
+      supabase.from('expose_extrakte').select('*').eq('objekt_id', id).order('erstellt_am', { ascending: false }),
+      supabase.from('ortschaften').select('gemeinde').eq('ort', obj.ort).maybeSingle(),
+    ]);
+    setExtrakte((ex.data || []) as ExposeExtrakt[]);
+    const gName = gm.data !== null ? (gm.data as { gemeinde: string }).gemeinde : obj.ort;
+    const g2 = await supabase.from('gemeinden').select('*').eq('name', gName).maybeSingle();
+    setGemeinde(g2.data !== null ? (g2.data as Gemeinde) : null);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Aufgelöste Dublette: zum Ziel weiterleiten. Sonst Besuch merken (für «neu für dich»).
+  useEffect(() => {
+    if (o === null || me === null) { return; }
+    if (o.zusammengefuehrt_in) { nav('/inserate/' + o.zusammengefuehrt_in, { replace: true }); return; }
+    supabase.from('objekt_besuche').upsert({ objekt_id: o.id, user_id: me.id, zuletzt: new Date().toISOString() }).then(() => undefined);
+  }, [o === null ? null : o.id, o === null ? null : o.zusammengefuehrt_in, me === null ? null : me.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Koordinaten fehlen oder Adresse geändert: hier direkt ermitteln
   useEffect(() => {
@@ -99,7 +127,15 @@ export default function Detail() {
     e.preventDefault();
     if (!aText.trim() || me === null) { return; }
     const labels: Record<string, string> = { notiz: 'Notiz', mail: 'Mail an Makler', telefon: 'Telefonat', besichtigung: 'Besichtigung', termin: 'Termin', dokument: 'Dokument', stufe: 'Stufe', system: 'System' };
-    await supabase.from('aktivitaeten').insert({ objekt_id: o!.id, user_id: me.id, typ: aTyp, titel: labels[aTyp], text: aText.trim(), faellig_am: aFaellig ? new Date(aFaellig).toISOString() : null });
+    const text = aText.trim();
+    await supabase.from('aktivitaeten').insert({ objekt_id: o!.id, user_id: me.id, typ: aTyp, titel: labels[aTyp], text, faellig_am: aFaellig ? new Date(aFaellig).toISOString() : null });
+    // Push an die anderen (bei @Name nur an die Erwähnten)
+    const erwaehnt = profiles.filter((p) => p.id !== me.id && new RegExp('@' + p.name.split(' ')[0], 'i').test(text));
+    const andere = erwaehnt.length > 0 ? erwaehnt : profiles.filter((p) => p.id !== me.id);
+    if (andere.length > 0) {
+      const titel = me.name.split(' ')[0] + ': ' + labels[aTyp] + ' zu ' + o!.ort + (o!.adresse ? ', ' + o!.adresse : '');
+      supabase.rpc('push_senden', { p_titel: titel, p_text: text.slice(0, 160), p_url: '/inserate/' + o!.id, p_user_ids: andere.map((p) => p.id) }).then(() => undefined);
+    }
     setAText(''); setAFaellig('');
     load();
   }
@@ -160,6 +196,27 @@ export default function Detail() {
     e.target.value = '';
   }
 
+  async function extrahieren(d: Dokument) {
+    setExtrahiere(d.id); setHinweis(null);
+    const { data, error } = await supabase.functions.invoke('expose-extrahieren', { body: { dokument_id: d.id } });
+    setExtrahiere(null);
+    const res = data as { error?: string } | null;
+    if (error || (res !== null && res.error)) {
+      let msg = res !== null && res.error ? res.error : (error ? error.message : 'Fehler');
+      if (error && (error as { context?: Response }).context) {
+        try { const j = await ((error as { context: Response }).context).json(); if (j && j.error) { msg = j.error; } } catch { /* egal */ }
+      }
+      setHinweis(msg);
+      return;
+    }
+    load();
+  }
+
+  async function zusammengefuehrt(zielId: string) {
+    setZfOffen(false);
+    nav('/inserate/' + zielId, { replace: true });
+  }
+
   async function openDoc(d: Dokument) {
     const { data } = await supabase.storage.from('dokumente').createSignedUrl(d.storage_path, 600);
     if (data) { window.open(data.signedUrl, '_blank', 'noopener'); }
@@ -199,6 +256,7 @@ export default function Detail() {
           ) : (
             <span className="chip link-fehlt" style={{ padding: '10px 12px' }} title="Kein Direktlink hinterlegt, wird beim nächsten Lauf ergänzt">Kein Direktlink zum Inserat</span>
           )}
+          <button type="button" className="btn" style={{ minHeight: 44 }} onClick={() => setZfOffen(true)} title="Dublette manuell zusammenführen">Zusammenführen</button>
           <label htmlFor="stufe-sel" className="sr-only">Stufe wechseln</label>
           <select id="stufe-sel" className="select" style={{ width: 'auto', minHeight: 44 }} value={o.stufe_code} onChange={(e) => changeStufe(e.target.value)}>
             {stufen.map((s) => <option key={s.code} value={s.code}>{s.phase_name} · {s.name}</option>)}
@@ -222,6 +280,50 @@ export default function Detail() {
         ))}
       </section>
 
+      {(() => {
+        const t = tragbarkeit(o.preis_chf, haushalt);
+        const eingerichtet = haushalt.eigenkapital !== null && haushalt.einkommen_jahr !== null;
+        return (
+          <section className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }} aria-label="Finanzierung und Gemeinde">
+            <div className="kpi" style={{ padding: '14px 16px', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span className="xs muted">Tragbarkeit</span>
+                <Link to="/einstellungen" className="xs">Haushalt anpassen</Link>
+              </div>
+              {t === null ? <span className="muted small">Kein Preis</span> : !eingerichtet ? (
+                <span className="small muted">Eigenkapital und Einkommen unter <Link to="/einstellungen">Einstellungen</Link> hinterlegen, dann rechnet die App pro Objekt.</span>
+              ) : (
+                <>
+                  <span className="tnum" style={{ fontSize: 22, fontWeight: 700, color: stufeFarbe(t.stufe) }}>{t.ekZuTief ? 'Eigenkapital zu tief' : quoteText(t)}<span className="xs muted" style={{ fontWeight: 400, marginLeft: 8 }}>{t.stufe === 'ok' ? 'tragbar' : t.stufe === 'knapp' ? 'knapp' : 'nicht tragbar'}</span></span>
+                  <div className="xs muted tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
+                    <span>Hypothek</span><span style={{ textAlign: 'right' }}>CHF {chf(t.hypothek)} ({(t.belehnung * 100).toFixed(0)} % Belehnung)</span>
+                    <span>Zins {haushalt.zins_kalk} % kalk.</span><span style={{ textAlign: 'right' }}>CHF {chf(t.zinsen)}</span>
+                    <span>Nebenkosten {haushalt.nebenkosten_pct} %</span><span style={{ textAlign: 'right' }}>CHF {chf(t.nebenkosten)}</span>
+                    <span>Amortisation</span><span style={{ textAlign: 'right' }}>CHF {chf(t.amortisation)}</span>
+                    <span style={{ fontWeight: 600 }}>Kosten pro Jahr</span><span style={{ textAlign: 'right', fontWeight: 600 }}>CHF {chf(t.kosten)} · {chf(t.kosten / 12)}/Mt</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="kpi" style={{ padding: '14px 16px', gap: 6 }}>
+              <span className="xs muted">Gemeinde &amp; Steuern</span>
+              {gemeinde === null ? <span className="small muted">Keine Gemeindedaten für «{o.ort}». Unter Einstellungen pflegen.</span> : (
+                <>
+                  <span style={{ fontSize: 18, fontWeight: 700 }}>{gemeinde.name} <span className="xs muted" style={{ fontWeight: 400 }}>{gemeinde.kanton}</span></span>
+                  <div className="xs muted tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
+                    <span>Steuerfuss {gemeinde.steuerfuss_jahr || ''}</span><span style={{ textAlign: 'right', fontWeight: 600, color: 'var(--ink)' }}>{gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–'}</span>
+                    {gemeinde.steuerfuss_hinweis ? <><span /><span style={{ textAlign: 'right' }}>{gemeinde.steuerfuss_hinweis}</span></> : null}
+                    {gemeinde.steuer_index !== null ? <><span>Index</span><span style={{ textAlign: 'right' }}>{gemeinde.steuer_index}{gemeinde.steuer_index_hinweis ? ' (' + gemeinde.steuer_index_hinweis + ')' : ''}</span></> : null}
+                    {gemeinde.steuer_beispiel_chf !== null ? <><span>Beispiel</span><span style={{ textAlign: 'right' }}>CHF {chf(gemeinde.steuer_beispiel_chf)}/Jahr{gemeinde.steuer_beispiel_hinweis ? ' · ' + gemeinde.steuer_beispiel_hinweis : ''}</span></> : null}
+                  </div>
+                  <span className="xs">{gemeinde.quelle_url ? <a href={gemeinde.quelle_url} target="_blank" rel="noopener noreferrer">Quelle ↗</a> : null} <span className="muted">· Steuerfüsse sind nur innerhalb eines Kantons vergleichbar</span></span>
+                </>
+              )}
+            </div>
+          </section>
+        );
+      })()}
+
       <section className="card" aria-labelledby="lage-h">
         <h2 id="lage-h" className="sr-only">Bild und Lage</h2>
         <div className="lage-grid">
@@ -239,6 +341,7 @@ export default function Detail() {
             <label style={{ cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }}>{bildLaedt ? 'Lädt …' : (o.bild_pfad || o.bild_url ? 'Bild ersetzen' : 'Bild hochladen')}<input type="file" accept="image/*" onChange={bildHochladen} style={{ display: 'none' }} disabled={bildLaedt} /></label>
           </span>
         </div>
+        <Galerie objektId={o.id} version={galerieVersion} />
       </section>
 
       <div className="two-col">
@@ -305,7 +408,7 @@ export default function Detail() {
                         </button>
                       ) : null}
                     </div>
-                    {a.text ? <span className="small" style={{ color: 'var(--ink-2)', whiteSpace: 'pre-line' }}>{a.text}</span> : null}
+                    {a.text ? <span className="small" style={{ color: 'var(--ink-2)', whiteSpace: 'pre-line' }}>{a.text.split(/(@[A-Za-zÄÖÜäöü]+)/g).map((t, i) => (/^@/.test(t) ? <mark key={i} className="erwaehnung">{t}</mark> : t))}</span> : null}
                   </div>
                 </div>
               ))}
@@ -314,6 +417,11 @@ export default function Detail() {
         </div>
 
         <aside className="side">
+          <section className="card pad" aria-labelledby="krit-h">
+            <div className="card-head"><h2 id="krit-h">Kriterien</h2><span className="xs muted">1 schlecht · 5 sehr gut</span></div>
+            <KriterienGrid objektId={o.id} />
+          </section>
+
           <section className="card pad" aria-labelledby="rate-h">
             <h2 id="rate-h">Bewertung pro Person</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
@@ -380,14 +488,44 @@ export default function Detail() {
               {docs.map((d) => (
                 <button key={d.id} type="button" onClick={() => openDoc(d)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', background: 'none', border: 'none', borderTop: '1px solid var(--line-soft)', width: '100%', textAlign: 'left' }}>
                   <span className="mono xs" style={{ flex: '0 0 36px', height: 36, borderRadius: 8, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-2)' }}>{(d.name.split('.').pop() || 'DOC').toUpperCase().slice(0, 4)}</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 auto' }}>
                     <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                    <span className="xs muted">{dateShort(d.created_at)} · {bytes(d.groesse_bytes)}</span>
+                    <span className="xs muted">{dateShort(d.created_at)} · {bytes(d.groesse_bytes)}{extrakte.some((x) => x.dokument_id === d.id) ? ' · ausgewertet' : ''}</span>
                   </span>
+                  {d.mime === 'application/pdf' || /\.pdf$/i.test(d.name) ? (
+                    <span className="chip accent" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); if (extrahiere === null) { extrahieren(d); } }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); extrahieren(d); } }}>
+                      {extrahiere === d.id ? 'Liest …' : extrakte.some((x) => x.dokument_id === d.id) ? 'Neu auswerten' : 'Kennzahlen'}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
-            <div className="stage-empty" style={{ marginTop: 10 }}>Exposé-PDF hochladen und Claude zum Extrahieren der Kennzahlen geben</div>
+            {hinweis !== null ? <div className="notice" style={{ marginTop: 10 }}>{hinweis}</div> : null}
+            {extrakte.length > 0 ? (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {extrakte.map((x) => {
+                  const d = x.daten;
+                  const zeile = (k: string, label: string, fmt?: (v: unknown) => string) => {
+                    const v = d[k];
+                    if (v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) { return null; }
+                    return <><span className="muted">{label}</span><span style={{ textAlign: 'right' }}>{fmt ? fmt(v) : Array.isArray(v) ? v.join(', ') : String(v)}</span></>;
+                  };
+                  return (
+                    <div key={x.dokument_id} style={{ background: 'var(--bg)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <span className="small" style={{ fontWeight: 600 }}>Exposé-Daten <span className="xs muted" style={{ fontWeight: 400 }}>{dateShort(x.erstellt_am)}{x.modell ? ' · ' + x.modell : ''}</span></span>
+                      {x.zusammenfassung ? <span className="small" style={{ color: 'var(--ink-2)' }}>{x.zusammenfassung}</span> : null}
+                      <div className="xs tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px' }}>
+                        {zeile('baujahr', 'Baujahr')}{zeile('renovationen', 'Renovationen')}{zeile('heizung', 'Heizung')}{zeile('energie', 'Energie')}
+                        {zeile('nebenkosten_chf_jahr', 'Nebenkosten/Jahr', (v) => 'CHF ' + chf(Number(v)))}{zeile('erneuerungsfonds_chf', 'Erneuerungsfonds', (v) => 'CHF ' + chf(Number(v)))}
+                        {zeile('stwe_anteil', 'STWE-Anteil')}{zeile('parkplaetze', 'Parkplätze')}{zeile('verfuegbarkeit', 'Verfügbar')}{zeile('grundstueck_m2', 'Grundstück', (v) => String(v) + ' m²')}
+                        {zeile('besonderheiten', 'Besonderheiten')}{zeile('risiken', 'Risiken')}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className="stage-empty" style={{ marginTop: 10 }}>Exposé-PDF hochladen und «Kennzahlen» antippen: Claude liest Baujahr, Nebenkosten, Erneuerungsfonds und mehr aus</div>
           </section>
 
           <section className="card pad" aria-labelledby="loc-h">
@@ -408,6 +546,7 @@ export default function Detail() {
           </section>
         </aside>
       </div>
+      {zfOffen ? <ZusammenfuehrenModal objekt={o} onClose={() => setZfOffen(false)} onDone={zusammengefuehrt} /> : null}
     </>
   );
 }
