@@ -1,23 +1,21 @@
-// Edge Function: sichert für Objekte ohne gespeichertes Bild ein Foto im Storage-Bucket "objektbilder".
-// Quelle: objekte.bild_url, sonst og:image / twitter:image der Inserat-Detailseite (Direktlink).
-// Aufruf (eingeloggt): supabase.functions.invoke('bild-sichern', { body: { objekt_id?: string, limit?: number } })
-import { createClient } from 'npm:@supabase/supabase-js@2';
+// Edge Function: sichert Inseratfotos im Storage-Bucket "objektbilder".
+// 1) Hauptbild: objekte.bild_url, sonst og:image der Inserat-Detailseite (Direktlink) -> objekte.bild_pfad
+// 2) Galerie: objekt_bilder.quelle_url -> objekt_bilder.pfad
+// Aufruf aus der App: supabase.functions.invoke('bild-sichern', { body: { objekt_id?, limit? } })
+// Aufruf aus SQL: select public.bilder_sichern();
+import { admin, berechtigt, cors, json, leseBody } from './auth.ts';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-};
 
 interface Quelle { url: string | null; url_direkt: boolean; status: string }
 interface Zeile { id: string; bild_url: string | null; bild_fehler: string | null; objekt_quellen: Quelle[] }
+interface Galerie { id: string; objekt_id: string; quelle_url: string; fehler: string | null; objekte: { objekt_quellen: Quelle[] } | null }
 
-async function holen(url: string, referer: string | null, ms = 10000): Promise<Response> {
+async function holen(url: string, referer: string | null, ms = 12000): Promise<Response> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
   try {
-    const headers: Record<string, string> = { 'User-Agent': UA, 'Accept-Language': 'de-CH,de;q=0.9' };
+    const headers: Record<string, string> = { 'User-Agent': UA, 'Accept-Language': 'de-CH,de;q=0.9', 'Accept': 'image/avif,image/webp,image/*,*/*;q=0.8' };
     if (referer !== null) { headers['Referer'] = referer; }
     return await fetch(url, { headers, redirect: 'follow', signal: ctl.signal });
   } finally {
@@ -52,28 +50,39 @@ function endung(typ: string): string {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') { return new Response('ok', { headers: cors }); }
+  const a = admin();
+  const b = await berechtigt(req, a);
+  if (!b.ok) { return json({ error: 'nicht berechtigt' }, 401); }
 
-  const admin = createClient(Deno.env.get('SUPABASE_URL') as string, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string);
-  let body: { objekt_id?: string; limit?: number } = {};
-  if (req.method === 'POST') {
-    try { body = await req.json(); } catch { body = {}; }
-  } else {
-    const u = new URL(req.url);
-    const l = u.searchParams.get('limit');
-    body = { objekt_id: u.searchParams.get('objekt_id') || undefined, limit: l !== null ? Number(l) : undefined };
-  }
-  const limit = Math.min(Math.max(body.limit !== undefined ? body.limit : 15, 1), 40);
+  const body = await leseBody(req);
+  const objektId = typeof body.objekt_id === 'string' && body.objekt_id !== '' ? body.objekt_id : null;
+  const limit = Math.min(Math.max(Number(body.limit !== undefined ? body.limit : 15) || 15, 1), 40);
 
-  let q = admin.from('objekte').select('id, bild_url, bild_fehler, objekt_quellen(url, url_direkt, status)').is('bild_pfad', null);
-  if (body.objekt_id) { q = q.eq('id', body.objekt_id); }
+  // Bild laden und ins Storage legen; gibt den Pfad oder null zurück
+  const sichern = async (bild: string, referer: string | null, pfadOhneEndung: string, fehler: string[]): Promise<string | null> => {
+    try {
+      const r = await holen(bild, referer);
+      const typ = r.headers.get('content-type') || '';
+      if (!r.ok || !typ.startsWith('image/')) { fehler.push('Bild ' + r.status + ' ' + typ + ' ' + bild); return null; }
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (bytes.byteLength < 2000 || bytes.byteLength > 10 * 1024 * 1024) { fehler.push('Bildgroesse ' + bytes.byteLength + ' ' + bild); return null; }
+      const pfad = pfadOhneEndung + '.' + endung(typ);
+      const up = await a.storage.from('objektbilder').upload(pfad, bytes, { contentType: typ.split(';')[0], upsert: true });
+      if (up.error) { fehler.push('Upload ' + up.error.message); return null; }
+      return pfad;
+    } catch (e) { fehler.push('Bild nicht erreichbar ' + bild + ' (' + String(e) + ')'); return null; }
+  };
+
+  // ---------------------------------------------------------------- Hauptbild
+  let q = a.from('objekte').select('id, bild_url, bild_fehler, objekt_quellen(url, url_direkt, status)').is('bild_pfad', null);
+  if (objektId !== null) { q = q.eq('id', objektId); }
   const { data, error } = await q.limit(200);
-  if (error) { return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } }); }
+  if (error) { return json({ error: error.message }, 500); }
 
-  // Nur Objekte, für die es etwas Neues zu versuchen gibt
   const offen = (data as Zeile[]).filter((o) => {
     const hatDirektlink = o.objekt_quellen.some((x) => x.url_direkt && x.url !== null);
-    if (!hatDirektlink && !o.bild_url) { return false; } // nichts zu versuchen, später erneut
-    if (body.objekt_id) { return true; }
+    if (!hatDirektlink && !o.bild_url) { return false; }
+    if (objektId !== null) { return true; }
     if (o.bild_fehler === null) { return true; }
     return o.bild_url !== null && !o.bild_fehler.includes(o.bild_url);
   }).slice(0, limit);
@@ -81,46 +90,58 @@ Deno.serve(async (req) => {
   const ergebnis: { id: string; ok: boolean; info: string }[] = [];
   for (const o of offen) {
     const seiten = o.objekt_quellen.filter((x) => x.url_direkt && x.url !== null).map((x) => x.url as string);
-    let fehler = '';
-    let gesichert = false;
-
-    const versuche = async (bild: string, referer: string | null): Promise<boolean> => {
-      try {
-        const r = await holen(bild, referer);
-        const typ = r.headers.get('content-type') || '';
-        if (!r.ok || !typ.startsWith('image/')) { fehler += 'Bild ' + r.status + ' ' + typ + ' ' + bild + '; '; return false; }
-        const bytes = new Uint8Array(await r.arrayBuffer());
-        if (bytes.byteLength < 2000 || bytes.byteLength > 10 * 1024 * 1024) { fehler += 'Bildgroesse ' + bytes.byteLength + ' ' + bild + '; '; return false; }
-        const pfad = 'auto/' + o.id + '.' + endung(typ);
-        const up = await admin.storage.from('objektbilder').upload(pfad, bytes, { contentType: typ.split(';')[0], upsert: true });
-        if (up.error) { fehler += 'Upload ' + up.error.message + '; '; return false; }
-        await admin.from('objekte').update({ bild_pfad: pfad, bild_url: o.bild_url || bild, bild_fehler: null }).eq('id', o.id);
-        return true;
-      } catch (e) { fehler += 'Bild nicht erreichbar ' + bild + ' (' + String(e) + '); '; return false; }
-    };
-
-    // 1) bekannte Bild-URL
-    if (o.bild_url) { gesichert = await versuche(o.bild_url, seiten.length > 0 ? seiten[0] : null); }
-    // 2) og:image der Detailseiten
+    const fehler: string[] = [];
+    let pfad: string | null = null;
+    let quelle: string | null = null;
+    if (o.bild_url) { quelle = o.bild_url; pfad = await sichern(o.bild_url, seiten.length > 0 ? seiten[0] : null, 'auto/' + o.id, fehler); }
     for (const seite of seiten) {
-      if (gesichert) { break; }
+      if (pfad !== null) { break; }
       try {
         const r = await holen(seite, null);
-        if (!r.ok) { fehler += 'Seite ' + r.status + ' ' + seite + '; '; continue; }
+        if (!r.ok) { fehler.push('Seite ' + r.status + ' ' + seite); continue; }
         const bild = metaBild(await r.text(), r.url || seite);
-        if (bild === null) { fehler += 'kein og:image ' + seite + '; '; continue; }
-        gesichert = await versuche(bild, seite);
-      } catch (e) { fehler += 'Seite nicht erreichbar ' + seite + ' (' + String(e) + '); '; }
+        if (bild === null) { fehler.push('kein og:image ' + seite); continue; }
+        quelle = bild;
+        pfad = await sichern(bild, seite, 'auto/' + o.id, fehler);
+      } catch (e) { fehler.push('Seite nicht erreichbar ' + seite + ' (' + String(e) + ')'); }
     }
-
-    if (!gesichert) {
-      const text = (fehler || 'kein Direktlink und keine Bild-URL') + (o.bild_url ? ' [' + o.bild_url + ']' : '');
-      await admin.from('objekte').update({ bild_fehler: text.slice(0, 1000) }).eq('id', o.id);
+    if (pfad !== null) {
+      await a.from('objekte').update({ bild_pfad: pfad, bild_url: o.bild_url || quelle, bild_fehler: null }).eq('id', o.id);
+      // Hauptbild auch als erstes Galeriebild führen
+      if (quelle !== null) {
+        await a.from('objekt_bilder').upsert({ objekt_id: o.id, quelle_url: quelle, pfad, sort: 0, fehler: null }, { onConflict: 'objekt_id,quelle_url' });
+      }
+    } else {
+      const text = (fehler.join('; ') || 'kein Direktlink und keine Bild-URL') + (o.bild_url ? ' [' + o.bild_url + ']' : '');
+      await a.from('objekte').update({ bild_fehler: text.slice(0, 1000) }).eq('id', o.id);
     }
-    ergebnis.push({ id: o.id, ok: gesichert, info: gesichert ? 'gesichert' : fehler.slice(0, 300) });
+    ergebnis.push({ id: o.id, ok: pfad !== null, info: pfad !== null ? 'gesichert' : fehler.join('; ').slice(0, 300) });
   }
 
-  return new Response(JSON.stringify({ geprueft: ergebnis.length, gesichert: ergebnis.filter((e) => e.ok).length, ergebnis }), {
-    headers: { ...cors, 'Content-Type': 'application/json' },
+  // ---------------------------------------------------------------- Galerie
+  let g = a.from('objekt_bilder').select('id, objekt_id, quelle_url, fehler, objekte(objekt_quellen(url, url_direkt, status))').is('pfad', null).is('fehler', null).order('sort');
+  if (objektId !== null) { g = g.eq('objekt_id', objektId); }
+  const gal = await g.limit(limit * 2);
+  const galerie: { id: string; ok: boolean; info: string }[] = [];
+  for (const bild of ((gal.data || []) as unknown as Galerie[])) {
+    const fehler: string[] = [];
+    const quellen = bild.objekte !== null ? bild.objekte.objekt_quellen : [];
+    const referer = quellen.filter((x) => x.url_direkt && x.url !== null).map((x) => x.url as string)[0] || null;
+    const pfad = await sichern(bild.quelle_url, referer, 'galerie/' + bild.objekt_id + '/' + bild.id, fehler);
+    if (pfad !== null) {
+      await a.from('objekt_bilder').update({ pfad, fehler: null }).eq('id', bild.id);
+    } else {
+      await a.from('objekt_bilder').update({ fehler: fehler.join('; ').slice(0, 500) }).eq('id', bild.id);
+    }
+    galerie.push({ id: bild.id, ok: pfad !== null, info: pfad !== null ? 'gesichert' : fehler.join('; ').slice(0, 200) });
+  }
+
+  return json({
+    geprueft: ergebnis.length,
+    gesichert: ergebnis.filter((e) => e.ok).length,
+    galerie_geprueft: galerie.length,
+    galerie_gesichert: galerie.filter((e) => e.ok).length,
+    ergebnis,
+    galerie,
   });
 });
