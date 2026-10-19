@@ -1,0 +1,140 @@
+export type MarktStatus = 'aktiv' | 'reserviert' | 'verkauft' | 'offline' | 'unbekannt';
+export type ObjektTyp = 'wohnung' | 'haus' | 'andere';
+
+export interface Profile {
+  id: string;
+  name: string;
+  kuerzel: string;
+  farbe: string;
+}
+
+export interface Stufe {
+  code: string;
+  name: string;
+  phase: number;
+  phase_name: string;
+  sort: number;
+  terminal: boolean;
+  hinweis: string | null;
+}
+
+export interface Quelle {
+  id: string;
+  makler: string;
+  externe_id: string | null;
+  url: string | null;
+  status: MarktStatus;
+  preis_chf: number | null;
+  kontakt?: string | null;
+  erstmals_gesehen?: string;
+  zuletzt_gesehen?: string;
+}
+
+export interface BewertungKurz {
+  sterne: number;
+  favorit: boolean;
+  uninteressant: boolean;
+}
+
+export interface Objekt {
+  id: string;
+  titel: string | null;
+  ort: string;
+  plz: string | null;
+  kanton: string | null;
+  adresse: string | null;
+  typ: ObjektTyp;
+  zimmer: number | null;
+  flaeche_m2: number | null;
+  grundstueck_m2: number | null;
+  baujahr: number | null;
+  preis_chf: number | null;
+  markt_status: MarktStatus;
+  stufe_code: string;
+  stufe_geaendert_am: string;
+  erstmals_gesehen: string;
+  zuletzt_gesehen: string;
+  notizen: string | null;
+  lage_hinweis: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ObjektUebersicht extends Objekt {
+  stufe_name: string;
+  stufe_phase: number;
+  stufe_phase_name: string;
+  stufe_sort: number;
+  stufe_terminal: boolean;
+  quellen: Quelle[];
+  bewertungen: Record<string, BewertungKurz>;
+  preis_vorher_chf: number | null;
+  preis_geaendert_am: string | null;
+}
+
+export interface Snapshot {
+  id: number;
+  objekt_id: string;
+  quelle_id: string | null;
+  datum: string;
+  typ: 'erfasst' | 'preis' | 'status' | 'flaeche' | 'zimmer' | 'bestaetigt' | 'neue_quelle' | 'dublette' | 'sonstiges';
+  alt: string | null;
+  neu: string | null;
+  kommentar: string | null;
+}
+
+export type AktivitaetTyp = 'notiz' | 'mail' | 'telefon' | 'besichtigung' | 'termin' | 'stufe' | 'system' | 'dokument';
+
+export interface Aktivitaet {
+  id: number;
+  objekt_id: string;
+  user_id: string | null;
+  typ: AktivitaetTyp;
+  titel: string;
+  text: string | null;
+  datum: string;
+  faellig_am: string | null;
+  erledigt: boolean;
+}
+
+export interface Bewertung extends BewertungKurz {
+  objekt_id: string;
+  user_id: string;
+  kommentar: string | null;
+  tags: string[];
+  updated_at: string;
+}
+
+export interface Dokument {
+  id: string;
+  objekt_id: string;
+  user_id: string | null;
+  name: string;
+  storage_path: string;
+  groesse_bytes: number | null;
+  mime: string | null;
+  kategorie: string | null;
+  created_at: string;
+}
+
+export interface Standortfaktor {
+  id: number;
+  objekt_id: string;
+  titel: string;
+  text: string | null;
+  bewertung: 'positiv' | 'neutral' | 'negativ';
+  quelle_url: string | null;
+  stand: string;
+}
+
+export interface LaufProtokoll {
+  id: number;
+  gestartet_am: string;
+  beendet_am: string | null;
+  makler: string;
+  geprueft: boolean;
+  anzahl_inserate: number | null;
+  neue: number;
+  geaendert: number;
+  fehler: string | null;
+}
