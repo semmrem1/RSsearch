@@ -23,8 +23,9 @@ AGENCIES TO CHECK:
 WRITING TO THE DATABASE:
 Before you start, read the current state once:
   select q.makler, q.externe_id, q.url, o.ort, o.zimmer, o.flaeche_m2, o.preis_chf from public.objekt_quellen q join public.objekte o on o.id = q.objekt_id where q.status = 'aktiv' order by q.makler, o.ort;
-For EVERY listing that matches the filter (new or already known), call the function once with all 14 arguments (batch many calls in one execute_sql query):
-  select public.upsert_inserat(p_makler, p_externe_id, p_url, p_ort, p_adresse, p_typ, p_zimmer, p_flaeche_m2, p_preis_chf, current_date, p_kanton, p_lage_hinweis, p_titel, p_bild_url);
+For EVERY listing that matches the filter (new or already known), call the function once with all 15 arguments (batch many calls in one execute_sql query):
+  select public.upsert_inserat(p_makler, p_externe_id, p_url, p_ort, p_adresse, p_typ, p_zimmer, p_flaeche_m2, p_preis_chf, current_date, p_kanton, p_lage_hinweis, p_titel, p_bild_url, p_status);
+- p_status: 'aktiv' normally; 'reserviert' if the listing is marked reserved/reserviert on the site; 'verkauft' if marked sold/verkauft but still shown. The app shows the status with date.
 Also call it for every listing that is already in the database (see the state query) and that you still see online, even if it no longer matches the filter (e.g. price raised above 2.5M or status "reserviert"). Otherwise markiere_offline would wrongly mark it offline.
 - p_makler: exactly one of 'Walde', 'Avora', 'Engel & Völkers', 'Von Poll', 'Streichan', 'Sotheby''s', 'RE/MAX', 'Raiffeisen', 'MoneyPark', 'Ginesta', 'HEV Aargau'
 - p_externe_id: the agency's listing id (null only if the site has none)
@@ -32,12 +33,23 @@ Also call it for every listing that is already in the database (see the state qu
 - p_bild_url: absolute URL of the listing's main photo (og:image of the detail page, or the first gallery image / result-card image). null only if the listing has no photo. The app copies the photo into its own storage.
 - p_ort: town with umlauts (Wädenswil, Küsnacht, Stäfa, Männedorf, Rüschlikon, Pfäffikon ZH, Schübelbach …), p_adresse: street + number whenever shown (needed for the map; if only a locality like "Nossikon" is shown, pass that), p_typ: 'wohnung' or 'haus', p_zimmer numeric, p_flaeche_m2 int, p_preis_chf bigint, p_kanton 'ZH'/'SZ'/'SG', p_lage_hinweis for inland towns, p_titel for a marketing name like 'Loft No. 1'
 - The function returns the objekt uuid. It updates zuletzt_gesehen, the price and the URL for known listings (price changes are recorded automatically as snapshots), merges the same object across agencies, and creates new objects otherwise.
+GALLERY PHOTOS: for every NEW object (and for known objects that have no rows in public.objekt_bilder yet), store up to 5 gallery photo URLs from the detail page, in page order (absolute https, property photos only, no logos/portraits/maps):
+  select public.bilder_hinzufuegen('<objekt uuid>'::uuid, array['https://…1.jpg','https://…2.jpg']);
+MONEYPARK ORIGINAL PORTAL: MoneyPark mirrors listings from Homegate, ImmoScout24, newhome, immobilier.ch, RealAdvisor, icasa, Flatfox, Properstar. Its API record (GET https://app.moneypark.ch/mpre-search-api/pub/v1/property/<id>/ from inside the page via javascript_tool; trailing slash required; fields: id, images[] (plain URLs), image, url = original portal detail page, title, address{city,street,houseNumber,postCode}, rooms, area, price, propertyType, buildingYear, landArea, daysOnMarket, isActive) gives the original portal URL. For each MoneyPark object store it as a mirrored source (portal name e.g. 'Homegate', portal listing id from the URL):
+  select public.spiegel_quelle('<objekt uuid>'::uuid, '<Portal>', '<original detail url>', 'MoneyPark', '<portal id>');
+Mirrored sources follow the MoneyPark status automatically (markiere_offline and upsert_inserat handle spiegel_von).
 Then, ONLY for every agency you checked completely (all pages read), mark listings that disappeared:
   select public.markiere_offline('<makler>', current_date);
 This sets every listing of that agency that was NOT seen in today's run to offline, with offline_seit = today (the app shows "Offline genommen seit <Datum>" and moves the object to "Vom Markt"). If a listing reappears later, upsert_inserat sets it active again automatically. Do NOT call markiere_offline for an agency you could not check completely (browser failure, partial pagination, filter not applied), otherwise listings would be wrongly marked offline.
+After all agencies: copy new photos into the app's storage and refresh commute times (both are asynchronous, just call them once):
+  select public.bilder_sichern(); select public.pendelzeiten_berechnen();
 Finally write one row per agency into the run log, e.g.:
   insert into public.lauf_protokoll (makler, geprueft, anzahl_inserate, neue, geaendert, fehler, beendet_am) values ('Walde', true, 142, 1, 0, null, now());
 (geprueft=false and fehler=<short text> if the site could not be read.)
+
+LOCATION FACTORS for NEW objects only (typ 'erfasst' today): do a short web research (WebSearch, 1 to 3 queries) on the municipality/neighbourhood: planned construction projects nearby, zone plan changes (Zonenplanrevision), major infrastructure (roads, rail, noise), school/kita situation. Insert 1 to 3 concise factors per new object with a source URL; never invent facts, skip if nothing reliable is found:
+  insert into public.standortfaktoren (objekt_id, titel, text, bewertung, quelle_url) values ('<objekt uuid>', 'Zonenplanrevision Wädenswil', 'Teilrevision in Vernehmlassung, betrifft Quartier …', 'neutral', 'https://…');
+(bewertung: 'positiv' | 'neutral' | 'negativ')
 
 DIRECT-LINK CHECK (before finishing): no active listing may be left without a direct link:
   select q.id, q.makler, q.externe_id, o.ort, o.adresse, o.preis_chf, q.url from public.objekt_quellen q join public.objekte o on o.id = q.objekt_id where q.status = 'aktiv' and not q.url_direkt;
@@ -51,6 +63,12 @@ DETERMINING WHAT CHANGED TODAY (run after all upserts):
 'erfasst' = new object today, 'preis' = price change (alt -> neu), 'status' = went offline (neu = 'offline', i.e. no longer found today) / reserved / sold / back online, 'neue_quelle' = known object now also listed by another agency.
 
 OUTPUT:
+- App push (Web Push to both phones via the app): for every NEW object today call
+    select public.push_senden('Neu: <Ort>, <Zi> Zi, <m²> m²', 'CHF <Preis> · <Makler>' , '/inserate/<objekt uuid>');
+  and for every price DROP today call
+    select public.push_senden('Preis gesenkt: <Ort>', 'CHF <alt> → CHF <neu> (<-x %>)', '/inserate/<objekt uuid>');
+  and for listings taken offline today ONE combined push: select public.push_senden('<n> Inserate offline', '<Ort, Preis; …>', '/inserate');
+  (max. 10 pushes per run; if more, send one summary push instead.)
 - If there are new objects, price changes or status changes today: send ONE push notification (PushNotification tool, status "proactive") with a short <routine_summary>: counts plus each new listing (town, rooms, m2, price, agency, direct URL), each price change and each listing taken offline today (town, price, agency). Keep it brief; details are in the app.
 - If nothing changed: no push notification, just finish quietly.
 - Never fabricate listings or URLs. If a site cannot be read, log it in lauf_protokoll with geprueft=false and move on. If the Chrome extension and the built-in browser both fail for 3+ consecutive days (check lauf_protokoll), mention it in the push.

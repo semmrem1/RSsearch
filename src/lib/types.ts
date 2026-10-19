@@ -6,7 +6,41 @@ export interface Profile {
   name: string;
   kuerzel: string;
   farbe: string;
+  arbeitsort?: string | null;
+  arbeitsort_lat?: number | null;
+  arbeitsort_lng?: number | null;
+  arbeitsort_station?: string | null;
 }
+
+export interface Haushalt {
+  id: number;
+  eigenkapital: number | null;
+  einkommen_jahr: number | null;
+  zins_kalk: number;
+  nebenkosten_pct: number;
+  amortisation_jahre: number;
+  belehnung_max: number;
+  tragbarkeit_max: number;
+}
+
+export interface Gemeinde {
+  name: string;
+  kanton: string;
+  steuerfuss: number | null;
+  steuerfuss_jahr: number | null;
+  steuerfuss_hinweis: string | null;
+  steuer_index: number | null;
+  steuer_index_hinweis: string | null;
+  steuer_beispiel_chf: number | null;
+  steuer_beispiel_hinweis: string | null;
+  quelle_url: string | null;
+}
+
+export interface Kriterium { code: string; name: string; beschreibung: string | null; sort: number }
+export interface KriterienBewertung { objekt_id: string; user_id: string; kriterium: string; wert: number }
+export interface ObjektBildRow { id: string; objekt_id: string; quelle_url: string; pfad: string | null; sort: number; fehler: string | null }
+export interface ExposeExtrakt { dokument_id: string; objekt_id: string; daten: Record<string, unknown>; zusammenfassung: string | null; modell: string | null; erstellt_am: string }
+export interface Pendelzeit { minuten: number; umstiege: number | null; von: string | null; nach: string | null }
 
 export interface Stufe {
   code: string;
@@ -25,6 +59,7 @@ export interface Quelle {
   url: string | null;
   url_direkt?: boolean;
   offline_seit?: string | null;
+  spiegel_von?: string | null;
   status: MarktStatus;
   preis_chf: number | null;
   kontakt?: string | null;
@@ -66,6 +101,7 @@ export interface Objekt {
   bild_pfad: string | null;
   bild_fehler: string | null;
   offline_seit: string | null;
+  zusammengefuehrt_in?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +116,20 @@ export interface ObjektUebersicht extends Objekt {
   bewertungen: Record<string, BewertungKurz>;
   preis_vorher_chf: number | null;
   preis_geaendert_am: string | null;
+  kriterien_scores: Record<string, number>;
+  score_gesamt: number | null;
+  pendelzeiten: Record<string, Pendelzeit>;
+  bilder_anzahl: number;
+  letzte_aktivitaet_am: string | null;
+  letzte_aktivitaet_user: string | null;
+  mein_besuch_am: string | null;
+  gemeinde: string | null;
+  gemeinde_kanton: string | null;
+  steuerfuss: number | null;
+  steuerfuss_jahr: number | null;
+  steuer_index: number | null;
+  steuer_beispiel_chf: number | null;
+  tage_am_markt: number;
 }
 
 export interface Snapshot {

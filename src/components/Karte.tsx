@@ -61,7 +61,17 @@ export default function Karte({ punkte, hoehe, onVerschoben, onNavigieren, zoom 
     const karteLayer = wmts('ch.swisstopo.pixelkarte-farbe', 'jpeg', 18);
     const luftbild = wmts('ch.swisstopo.swissimage', 'jpeg', 19);
     karteLayer.addTo(m);
-    L.control.layers({ Karte: karteLayer, Luftbild: luftbild }, undefined, { position: 'topright' }).addTo(m);
+    // Zuschaltbare Ebenen des Bundes (BAFU/BAZL): Lärm und Naturgefahren
+    const overlay = (layer: string): L.TileLayer => L.tileLayer('https://wmts.geo.admin.ch/1.0.0/' + layer + '/default/current/3857/{z}/{x}/{y}.png', { attribution: ATTRIBUTION, opacity: 0.6, maxNativeZoom: 17, maxZoom: 20 });
+    const overlays: Record<string, L.TileLayer> = {
+      'Strassenlärm (Tag)': overlay('ch.bafu.laerm-strassenlaerm_tag'),
+      'Bahnlärm (Tag)': overlay('ch.bafu.laerm-bahnlaerm_tag'),
+      'Fluglärm': overlay('ch.bazl.laermbelastungskataster-zivilflugplaetze_klein-grossflugzeuge'),
+      'Hochwasser (100-jährlich)': overlay('ch.bafu.aquaprotect_100'),
+      'Oberflächenabfluss': overlay('ch.bafu.gefaehrdungskarte-oberflaechenabfluss'),
+      'Hangmuren': overlay('ch.bafu.silvaprotect-hangmuren'),
+    };
+    L.control.layers({ Karte: karteLayer, Luftbild: luftbild }, overlays, { position: 'topright', collapsed: true }).addTo(m);
     ebene.current = L.layerGroup().addTo(m);
     karte.current = m;
 
