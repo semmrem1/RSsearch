@@ -338,3 +338,6 @@ body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; ov
 .chip-weg { text-decoration: line-through; color: var(--ink-4) !important; }
 .chip.offline { background: var(--warm-soft); color: var(--warm-dark); }
 .pp-offline { color: var(--warm-dark); font-weight: 600; font-size: 12px; }
+
+.obj-karte-kennzahlen { display: flex; flex-wrap: wrap; gap: 6px; }
+table.list { min-width: 1280px; }

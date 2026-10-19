@@ -13,7 +13,7 @@ import type { Aktivitaet, Snapshot } from '../lib/types';
 interface FeedItem { key: string; when: string; kind: string; cls: string; title: string; detail: string; objektId: string }
 
 export default function Uebersicht() {
-  const { profiles } = useApp();
+  const { profiles, me, haushalt } = useApp();
   const { objekte, loading, reload } = useObjekte();
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const [todos, setTodos] = useState<Aktivitaet[]>([]);
@@ -66,7 +66,7 @@ export default function Uebersicht() {
       return { key: 'snap' + s.id, when: relative(s.datum) === 'heute' ? new Date(s.datum).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : dateShort(s.datum), kind, cls, title: name, detail, objektId: s.objekt_id };
     });
 
-  const filtered = filtern(objekte, filter);
+  const filtered = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
 
   return (
     <>

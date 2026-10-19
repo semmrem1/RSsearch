@@ -105,7 +105,18 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
           {profiles.map((p) => <option key={p.id} value={p.id}>Favoriten {p.name.split(' ')[0]}{me !== null && me.id === p.id ? ' (ich)' : ''}</option>)}
         </select>
         <label className="f-check small">
-          <input type="checkbox" checked={wert.ausgeschieden} onChange={(e) => set({ ausgeschieden: e.target.checked })} /> Ausgeschiedene zeigen
+          <input type="checkbox" checked={wert.ausgeschieden} onChange={(e) => set({ ausgeschieden: e.target.checked })} /> Ausgeschiedene
+        </label>
+        <label className="f-check small">
+          <input type="checkbox" checked={wert.nurTragbar} onChange={(e) => set({ nurTragbar: e.target.checked })} /> Nur tragbar
+        </label>
+        <label className="f-check small">
+          <input type="checkbox" checked={wert.nurUneinig} onChange={(e) => set({ nurUneinig: e.target.checked })} /> Nur uneinig
+        </label>
+        <label className="f-check small" title="ÖV-Pendelzeit zu meinem Arbeitsort">
+          🚆 max.
+          <input className="input" type="number" inputMode="numeric" min={5} max={180} step={5} placeholder="Min" value={wert.pendelMax !== null ? wert.pendelMax : ''} onChange={(e) => set({ pendelMax: e.target.value === '' ? null : Number(e.target.value) })} style={{ width: 76, minHeight: 36 }} />
+          Min
         </label>
       </div>
       <div className="filter-status">

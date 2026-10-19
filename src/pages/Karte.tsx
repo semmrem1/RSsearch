@@ -2,16 +2,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import FilterBar from '../components/FilterBar';
 import { filtern, useObjektFilter } from '../lib/filter';
 import { useObjekte } from '../hooks/useObjekte';
+import { useApp } from '../state/AppContext';
 import Karte from '../components/KarteLazy';
 import { phasenFarbe, zuKartenpunkt } from '../lib/kartenpunkte';
 import type { KartenPunkt } from '../components/Karte';
 
 export default function KartePage() {
+  const { me, haushalt } = useApp();
   const { objekte, loading, geoOffen } = useObjekte();
   const [filter, setFilter] = useObjektFilter('karte');
   const nav = useNavigate();
 
-  const sichtbar = filtern(objekte, filter);
+  const sichtbar = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
 
   const punkte: KartenPunkt[] = [];
   sichtbar.forEach((o) => { const p = zuKartenpunkt(o); if (p !== null) { punkte.push(p); } });

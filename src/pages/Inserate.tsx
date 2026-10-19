@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useObjekte } from '../hooks/useObjekte';
+import { useApp } from '../state/AppContext';
 import ObjektTable from '../components/ObjektTable';
 import ObjektForm from '../components/ObjektForm';
 import FilterBar from '../components/FilterBar';
 import { filtern, useObjektFilter } from '../lib/filter';
 
 export default function Inserate() {
+  const { me, haushalt } = useApp();
   const { objekte, loading, reload } = useObjekte();
   const [filter, setFilter] = useObjektFilter('inserate');
   const [showForm, setShowForm] = useState(false);
   const nav = useNavigate();
-  const rows = filtern(objekte, filter);
+  const rows = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
 
   return (
     <>
