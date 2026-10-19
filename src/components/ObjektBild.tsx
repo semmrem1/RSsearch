@@ -22,7 +22,7 @@ function BildMitFallback({ o, className, label }: { o: BildObjekt; className?: s
   const k = kandidaten[i];
   return (
     <div className={cls}>
-      <img src={k.src} alt={'Bild ' + o.ort} loading="lazy" referrerPolicy="no-referrer" onError={() => setI(i + 1)} />
+      <img src={k.src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setI(i + 1)} />
       {label && k.art === 'luftbild' ? <span className="objbild-tag">Luftbild</span> : null}
     </div>
   );

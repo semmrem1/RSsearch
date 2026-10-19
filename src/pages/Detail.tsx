@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { Avatar } from '../components/Layout';
 import { StarsInput, StarsText } from '../components/Stars';
 import ObjektBild from '../components/ObjektBild';
-import Karte from '../components/Karte';
+import Karte from '../components/KarteLazy';
 import { direktQuelle, quelleDirekt } from '../lib/links';
 import { geocode, geoSuchtext } from '../lib/geo';
-import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, statusLabel } from '../lib/format';
+import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Bewertung, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
 
 export default function Detail() {
   const { id } = useParams();
+  const nav = useNavigate();
   const { me, profiles, stufen, stufeByCode } = useApp();
   const [o, setO] = useState<Objekt | null>(null);
   const [quellen, setQuellen] = useState<Quelle[]>([]);
@@ -179,19 +180,20 @@ export default function Detail() {
 
   return (
     <>
-      <Link to="/" className="small" style={{ textDecoration: 'none' }}>← Zurück zur Übersicht</Link>
+      {/* In der installierten App gibt es keinen Browser-Zurück-Knopf */}
+      <button type="button" className="linkbtn small" style={{ alignSelf: 'flex-start', fontWeight: 500 }} onClick={() => { if (window.history.state !== null && window.history.state.idx > 0) { nav(-1); } else { nav('/'); } }}>← Zurück</button>
 
       <div className="page-head" style={{ alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <span className="chip accent">{stufe !== null ? stufe.name : o.stufe_code}</span>
-            <span className={'chip ' + (o.markt_status === 'aktiv' ? 'green' : 'warm')}>{statusLabel(o.markt_status)}</span>
+            <span className={'chip ' + (o.markt_status === 'aktiv' ? 'green' : 'warm')}>{marktText(o.markt_status, o.offline_seit)}</span>
             <span className="xs muted">Erstmals gesehen {dateLong(o.erstmals_gesehen)} · zuletzt bestätigt {dateLong(o.zuletzt_gesehen)}</span>
           </div>
           <h1>{o.ort} · {o.zimmer !== null ? o.zimmer + '-Zimmer-' : ''}{typLabel(o.typ)}{o.titel ? ' «' + o.titel + '»' : ''}</h1>
           <p className="sub">{o.adresse ? o.adresse : 'Adresse noch nicht publiziert'}{o.plz ? ' · ' + o.plz : ''}{o.kanton ? ' ' + o.kanton : ''}{o.lage_hinweis ? ' · ' + o.lage_hinweis : ''}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="detail-aktionen" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {direkt !== null && direkt.url ? (
             <a className="btn primary" href={direkt.url} target="_blank" rel="noopener noreferrer" style={{ minHeight: 44 }}>Inserat öffnen ↗ <span style={{ fontWeight: 400, opacity: 0.85 }}>{direkt.makler}</span></a>
           ) : (
@@ -203,6 +205,12 @@ export default function Detail() {
           </select>
         </div>
       </div>
+
+      {o.markt_status === 'offline' || o.markt_status === 'verkauft' ? (
+        <div className="notice" role="status">
+          <strong>{marktText(o.markt_status, o.offline_seit)}.</strong> Der tägliche Lauf hat das Inserat beim Makler nicht mehr gefunden. Taucht es wieder auf, wird es automatisch wieder aktiv.
+        </div>
+      ) : null}
 
       <section className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }} aria-label="Eckdaten">
         {facts.map((f) => (
@@ -353,10 +361,10 @@ export default function Detail() {
                 <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
                     {q.url && quelleDirekt(q) ? <a href={q.url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{q.makler} ↗</a> : <span style={{ fontWeight: 600 }}>{q.makler} <span className="chip link-fehlt" style={{ marginLeft: 6 }}>kein Direktlink</span></span>}
-                    <span className="xs muted">{q.externe_id || ''}</span>
+                    <span className="xs muted" title={q.externe_id || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 140 }}>{q.externe_id || ''}</span>
                   </div>
                   {q.kontakt ? <span className="small" style={{ color: 'var(--ink-2)' }}>{q.kontakt}</span> : null}
-                  <span className="xs muted">{statusLabel(q.status)} · seit {dateShort(q.erstmals_gesehen)} · zuletzt {dateShort(q.zuletzt_gesehen)}{q.preis_chf !== null ? ' · CHF ' + chf(q.preis_chf) : ''}</span>
+                  <span className="xs muted"><span style={q.status !== 'aktiv' ? { color: 'var(--warm-dark)', fontWeight: 600 } : undefined}>{marktText(q.status, q.offline_seit)}</span> · erfasst {dateShort(q.erstmals_gesehen)} · zuletzt {dateShort(q.zuletzt_gesehen)}{q.preis_chf !== null ? ' · CHF ' + chf(q.preis_chf) : ''}</span>
                 </div>
               ))}
             </div>

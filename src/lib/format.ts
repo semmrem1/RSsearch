@@ -72,3 +72,13 @@ export function statusLabel(s: string): string {
   const map: Record<string, string> = { aktiv: 'Aktiv am Markt', reserviert: 'Reserviert', verkauft: 'Verkauft', offline: 'Nicht mehr online', unbekannt: 'Status unbekannt' };
   return map[s] || s;
 }
+
+/** Marktstatus mit Datum, z.B. "Offline seit 19.10.2026" */
+export function marktText(status: string, seit: string | null | undefined, kurz = false): string {
+  const d = seit ? (kurz ? dateShort(seit) : dateLong(seit)) : '';
+  if (status === 'offline') { return (kurz ? 'offline' : 'Offline genommen') + (d ? ' seit ' + d : ''); }
+  if (status === 'verkauft') { return (kurz ? 'verkauft' : 'Verkauft') + (d ? ' seit ' + d : ''); }
+  if (status === 'reserviert') { return kurz ? 'reserviert' : 'Reserviert'; }
+  if (status === 'aktiv') { return kurz ? 'aktiv' : 'Aktiv am Markt'; }
+  return statusLabel(status);
+}

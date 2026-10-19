@@ -11,6 +11,9 @@ Immobilien-Tracker für die Eigenheimsuche von Remo und Pascale. React + Vite + 
 - Aktivitäten-Timeline mit Fälligkeiten, Dokumente im Supabase Storage, Standortfaktoren
 - Karte (swisstopo) im Inserat und Gesamtkarte aller Inserate (`/karte`); Koordinaten ermittelt die App über die geo.admin.ch-Suche und speichert sie in `objekte.lat/lng`
 - Bild pro Objekt: Edge Function `bild-sichern` kopiert das Inseratfoto (`bild_url` oder og:image der Detailseite) in den Bucket `objektbilder`; ohne Foto zeigt die App das Luftbild an der Adresse
+- Sortierbare Tabelle (Spaltentitel), Filter nach Ortschaft, Markt, Phase und Favoriten auf Übersicht, Inserate und Karte; Filter und Sortierung bleiben im Browser gespeichert
+- Mobile: Inserate als Karten, Ortsfilter als Bottom Sheet, installierbar als PWA (`manifest.webmanifest`, `sw.js` cached nur die App-Shell, Daten kommen immer live)
+- Nicht mehr gefundene Inserate: `markiere_offline` setzt `status = 'offline'` und `offline_seit`, die App zeigt «Offline genommen seit …»; taucht das Inserat wieder auf, wird es automatisch wieder aktiv
 - Direktlink zum Inserat ist Pflicht: `objekt_quellen.url_direkt` erkennt Übersichtsseiten, `upsert_inserat` lehnt sie ab
 
 ## Lokal starten

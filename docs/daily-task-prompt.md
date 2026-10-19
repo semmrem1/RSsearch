@@ -25,6 +25,7 @@ Before you start, read the current state once:
   select q.makler, q.externe_id, q.url, o.ort, o.zimmer, o.flaeche_m2, o.preis_chf from public.objekt_quellen q join public.objekte o on o.id = q.objekt_id where q.status = 'aktiv' order by q.makler, o.ort;
 For EVERY listing that matches the filter (new or already known), call the function once with all 14 arguments (batch many calls in one execute_sql query):
   select public.upsert_inserat(p_makler, p_externe_id, p_url, p_ort, p_adresse, p_typ, p_zimmer, p_flaeche_m2, p_preis_chf, current_date, p_kanton, p_lage_hinweis, p_titel, p_bild_url);
+Also call it for every listing that is already in the database (see the state query) and that you still see online, even if it no longer matches the filter (e.g. price raised above 2.5M or status "reserviert"). Otherwise markiere_offline would wrongly mark it offline.
 - p_makler: exactly one of 'Walde', 'Avora', 'Engel & Völkers', 'Von Poll', 'Streichan', 'Sotheby''s', 'RE/MAX', 'Raiffeisen', 'MoneyPark', 'Ginesta', 'HEV Aargau'
 - p_externe_id: the agency's listing id (null only if the site has none)
 - p_url (MANDATORY): the DIRECT URL of the listing's own detail page, exactly as opened (e.g. https://www.remax.ch/de/immobilien/118471013-278, https://www.engelvoelkers.com/exposes/3e9fd83c, https://app.moneypark.ch/de/immobilien/kaufen/immobilie/<id>, the Walde or Streichan detail page). Never an overview, search or agency start page. The function rejects overview/search URLs with an error; if that happens, open the listing's detail page and retry with its URL.
@@ -33,7 +34,7 @@ For EVERY listing that matches the filter (new or already known), call the funct
 - The function returns the objekt uuid. It updates zuletzt_gesehen, the price and the URL for known listings (price changes are recorded automatically as snapshots), merges the same object across agencies, and creates new objects otherwise.
 Then, ONLY for every agency you checked completely (all pages read), mark listings that disappeared:
   select public.markiere_offline('<makler>', current_date);
-Do NOT call markiere_offline for an agency you could not check completely (browser failure, partial pagination).
+This sets every listing of that agency that was NOT seen in today's run to offline, with offline_seit = today (the app shows "Offline genommen seit <Datum>" and moves the object to "Vom Markt"). If a listing reappears later, upsert_inserat sets it active again automatically. Do NOT call markiere_offline for an agency you could not check completely (browser failure, partial pagination, filter not applied), otherwise listings would be wrongly marked offline.
 Finally write one row per agency into the run log, e.g.:
   insert into public.lauf_protokoll (makler, geprueft, anzahl_inserate, neue, geaendert, fehler, beendet_am) values ('Walde', true, 142, 1, 0, null, now());
 (geprueft=false and fehler=<short text> if the site could not be read.)
@@ -47,10 +48,10 @@ Mention any listing you could not fix in the push.
 
 DETERMINING WHAT CHANGED TODAY (run after all upserts):
   select s.typ, o.ort, o.adresse, o.zimmer, o.flaeche_m2, o.preis_chf, s.alt, s.neu, (select string_agg(q.makler || ' ' || coalesce(q.url, ''), ', ') from public.objekt_quellen q where q.objekt_id = o.id) as quellen from public.snapshots s join public.objekte o on o.id = s.objekt_id where s.typ in ('erfasst','preis','status','neue_quelle') and s.datum::date = current_date order by s.typ, o.ort;
-'erfasst' = new object today, 'preis' = price change (alt -> neu), 'status' = went offline/reserved/sold, 'neue_quelle' = known object now also listed by another agency.
+'erfasst' = new object today, 'preis' = price change (alt -> neu), 'status' = went offline (neu = 'offline', i.e. no longer found today) / reserved / sold / back online, 'neue_quelle' = known object now also listed by another agency.
 
 OUTPUT:
-- If there are new objects, price changes or status changes today: send ONE push notification (PushNotification tool, status "proactive") with a short <routine_summary>: counts plus each new listing (town, rooms, m2, price, agency, direct URL) and each price change. Keep it brief; details are in the app.
+- If there are new objects, price changes or status changes today: send ONE push notification (PushNotification tool, status "proactive") with a short <routine_summary>: counts plus each new listing (town, rooms, m2, price, agency, direct URL), each price change and each listing taken offline today (town, price, agency). Keep it brief; details are in the app.
 - If nothing changed: no push notification, just finish quietly.
 - Never fabricate listings or URLs. If a site cannot be read, log it in lauf_protokoll with geprueft=false and move on. If the Chrome extension and the built-in browser both fail for 3+ consecutive days (check lauf_protokoll), mention it in the push.
 - Do not write to memory files for this task anymore; the database replaces them.

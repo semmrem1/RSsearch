@@ -1,7 +1,7 @@
 import type { KartenPunkt } from '../components/Karte';
 import { bildKandidaten } from './bild';
 import { versatz } from './geo';
-import { chf, typLabel } from './format';
+import { chf, typLabel, marktText } from './format';
 import { quelleDirekt } from './links';
 import type { ObjektUebersicht } from './types';
 
@@ -44,6 +44,7 @@ export function zuKartenpunkt(o: ObjektUebersicht): KartenPunkt | null {
     '<a class="pp-title" href="/inserate/' + o.id + '" data-nav="' + o.id + '">' + esc(o.ort) + (o.adresse ? ', ' + esc(o.adresse) : '') + '</a>' +
     '<div class="pp-facts">' + esc(fakten) + '</div>' +
     '<div class="pp-price">' + esc(chf(o.preis_chf, true)) + '</div>' +
+    (o.markt_status !== 'aktiv' ? '<div class="pp-offline">' + esc(marktText(o.markt_status, o.offline_seit)) + '</div>' : '') +
     '<div class="pp-stage">' + esc(o.stufe_name) + (genau ? '' : ' · Lage nur auf Ortsebene') + '</div>' +
     '<div class="pp-links"><a class="pp-detail" href="/inserate/' + o.id + '" data-nav="' + o.id + '">Details</a>' + links + '</div>' +
     '</div>';

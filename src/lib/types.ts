@@ -24,6 +24,7 @@ export interface Quelle {
   externe_id: string | null;
   url: string | null;
   url_direkt?: boolean;
+  offline_seit?: string | null;
   status: MarktStatus;
   preis_chf: number | null;
   kontakt?: string | null;
@@ -64,6 +65,7 @@ export interface Objekt {
   bild_url: string | null;
   bild_pfad: string | null;
   bild_fehler: string | null;
+  offline_seit: string | null;
   created_at: string;
   updated_at: string;
 }
