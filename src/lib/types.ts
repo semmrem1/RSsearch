@@ -23,6 +23,7 @@ export interface Quelle {
   makler: string;
   externe_id: string | null;
   url: string | null;
+  url_direkt?: boolean;
   status: MarktStatus;
   preis_chf: number | null;
   kontakt?: string | null;
@@ -56,6 +57,13 @@ export interface Objekt {
   zuletzt_gesehen: string;
   notizen: string | null;
   lage_hinweis: string | null;
+  lat: number | null;
+  lng: number | null;
+  geo_genauigkeit: 'adresse' | 'ort' | 'manuell' | null;
+  geo_suchtext: string | null;
+  bild_url: string | null;
+  bild_pfad: string | null;
+  bild_fehler: string | null;
   created_at: string;
   updated_at: string;
 }

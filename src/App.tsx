@@ -10,6 +10,7 @@ import Pipeline from './pages/Pipeline';
 import Inserate from './pages/Inserate';
 import Detail from './pages/Detail';
 import Dokumente from './pages/Dokumente';
+import KartePage from './pages/Karte';
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/inserate" element={<Inserate />} />
           <Route path="/inserate/:id" element={<Detail />} />
+          <Route path="/karte" element={<KartePage />} />
           <Route path="/dokumente" element={<Dokumente />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

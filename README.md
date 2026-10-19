@@ -9,6 +9,9 @@ Immobilien-Tracker für die Eigenheimsuche von Remo und Pascale. React + Vite + 
 - Pipeline in 5 Phasen und 18 Stufen nach dem Schweizer Kaufablauf, plus «Ausgeschieden»
 - Bewertungen (Sterne, Favorit, Kommentar, Tags) pro Person
 - Aktivitäten-Timeline mit Fälligkeiten, Dokumente im Supabase Storage, Standortfaktoren
+- Karte (swisstopo) im Inserat und Gesamtkarte aller Inserate (`/karte`); Koordinaten ermittelt die App über die geo.admin.ch-Suche und speichert sie in `objekte.lat/lng`
+- Bild pro Objekt: Edge Function `bild-sichern` kopiert das Inseratfoto (`bild_url` oder og:image der Detailseite) in den Bucket `objektbilder`; ohne Foto zeigt die App das Luftbild an der Adresse
+- Direktlink zum Inserat ist Pflicht: `objekt_quellen.url_direkt` erkennt Übersichtsseiten, `upsert_inserat` lehnt sie ab
 
 ## Lokal starten
 
@@ -32,6 +35,7 @@ Schema in `supabase/migrations/`. Der tägliche Monitoring-Task schreibt über d
 Konventionen für den Task:
 
 - Dublettenprüfung zuerst über `objekt_quellen (makler, externe_id)`, dann über `objekte (ort, zimmer, flaeche_m2)` mit Preis ±2 %
+- Immer `upsert_inserat(…, p_bild_url)` mit der Direkt-URL der Detailseite aufrufen (Übersichts-/Suchseiten werden abgelehnt)
 - Neues Objekt: Insert in `objekte` (Stufe `neu`), dann Insert in `objekt_quellen`; der Trigger schreibt den `erfasst`-Snapshot
 - Bestehendes Objekt: `zuletzt_gesehen` setzen; bei Preisänderung `preis_chf` updaten (Trigger schreibt Snapshot); Objekt nicht mehr gefunden an 2 Läufen in Folge: `markt_status = 'offline'`
 - Pro Makler eine Zeile in `lauf_protokoll`

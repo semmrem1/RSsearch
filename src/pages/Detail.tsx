@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { Avatar } from '../components/Layout';
 import { StarsInput, StarsText } from '../components/Stars';
+import ObjektBild from '../components/ObjektBild';
+import Karte from '../components/Karte';
+import { direktQuelle, quelleDirekt } from '../lib/links';
+import { geocode, geoSuchtext } from '../lib/geo';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, statusLabel } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Bewertung, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
 
@@ -31,6 +35,8 @@ export default function Detail() {
   const [rKomm, setRKomm] = useState('');
   const [rTags, setRTags] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [bildLaedt, setBildLaedt] = useState(false);
+  const [geoStatus, setGeoStatus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) { return; }
@@ -54,6 +60,22 @@ export default function Detail() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Koordinaten fehlen oder Adresse geändert: hier direkt ermitteln
+  useEffect(() => {
+    if (o === null || o.geo_genauigkeit === 'manuell') { return; }
+    if (o.lat !== null && o.geo_suchtext === geoSuchtext(o)) { return; }
+    let ab = false;
+    setGeoStatus('Adresse wird gesucht …');
+    geocode(o).then(async (t) => {
+      if (ab) { return; }
+      if (t === null) { setGeoStatus('Adresse nicht gefunden. Marker manuell setzen: auf der Karte verschieben.'); return; }
+      const patch = { lat: t.lat, lng: t.lng, geo_genauigkeit: t.genauigkeit, geo_suchtext: geoSuchtext(o) };
+      await supabase.from('objekte').update(patch).eq('id', o.id);
+      if (!ab) { setO({ ...o, ...patch }); setGeoStatus(null); }
+    }).catch(() => { if (!ab) { setGeoStatus('Kartendienst nicht erreichbar.'); } });
+    return () => { ab = true; };
+  }, [o === null ? null : o.id, o === null ? null : geoSuchtext(o)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (me === null) { return; }
@@ -117,10 +139,34 @@ export default function Detail() {
     load();
   }
 
+  async function markerVerschoben(_id: string, lat: number, lng: number) {
+    const patch = { lat, lng, geo_genauigkeit: 'manuell' as const };
+    await supabase.from('objekte').update(patch).eq('id', o!.id);
+    setO({ ...o!, ...patch });
+  }
+
+  async function bildHochladen(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files !== null ? e.target.files[0] : undefined;
+    if (f === undefined) { return; }
+    setBildLaedt(true);
+    const path = o!.id + '/' + Date.now() + '_' + f.name.replace(/[^A-Za-z0-9._-]/g, '_');
+    const { error } = await supabase.storage.from('objektbilder').upload(path, f, { contentType: f.type, upsert: true });
+    if (!error) {
+      await supabase.from('objekte').update({ bild_pfad: path, bild_fehler: null }).eq('id', o!.id);
+      setO({ ...o!, bild_pfad: path, bild_fehler: null });
+    }
+    setBildLaedt(false);
+    e.target.value = '';
+  }
+
   async function openDoc(d: Dokument) {
     const { data } = await supabase.storage.from('dokumente').createSignedUrl(d.storage_path, 600);
     if (data) { window.open(data.signedUrl, '_blank', 'noopener'); }
   }
+
+  const direkt = direktQuelle(quellen);
+  const genauText = o.geo_genauigkeit === 'adresse' ? 'Position aus Adresse' : o.geo_genauigkeit === 'manuell' ? 'Position manuell gesetzt' : o.geo_genauigkeit === 'ort' ? 'Nur Ort bekannt, Position ungefähr' : '';
+  const geoAdminLink = o.lat !== null && o.lng !== null ? 'https://map.geo.admin.ch/#/map?lang=de&center=' + o.lng.toFixed(6) + ',' + o.lat.toFixed(6) + '&z=12&crosshair=marker&bgLayer=ch.swisstopo.swissimage&swisssearch=' + encodeURIComponent((o.adresse || '') + ' ' + o.ort) : null;
 
   const facts = [
     { k: 'Preis', v: chf(o.preis_chf, true), sub: lastPriceChange ? 'geändert ' + dateShort(lastPriceChange.datum) : 'unverändert seit Erfassung' },
@@ -146,6 +192,11 @@ export default function Detail() {
           <p className="sub">{o.adresse ? o.adresse : 'Adresse noch nicht publiziert'}{o.plz ? ' · ' + o.plz : ''}{o.kanton ? ' ' + o.kanton : ''}{o.lage_hinweis ? ' · ' + o.lage_hinweis : ''}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {direkt !== null && direkt.url ? (
+            <a className="btn primary" href={direkt.url} target="_blank" rel="noopener noreferrer" style={{ minHeight: 44 }}>Inserat öffnen ↗ <span style={{ fontWeight: 400, opacity: 0.85 }}>{direkt.makler}</span></a>
+          ) : (
+            <span className="chip link-fehlt" style={{ padding: '10px 12px' }} title="Kein Direktlink hinterlegt, wird beim nächsten Lauf ergänzt">Kein Direktlink zum Inserat</span>
+          )}
           <label htmlFor="stufe-sel" className="sr-only">Stufe wechseln</label>
           <select id="stufe-sel" className="select" style={{ width: 'auto', minHeight: 44 }} value={o.stufe_code} onChange={(e) => changeStufe(e.target.value)}>
             {stufen.map((s) => <option key={s.code} value={s.code}>{s.phase_name} · {s.name}</option>)}
@@ -161,6 +212,25 @@ export default function Detail() {
             <span className="xs muted">{f.sub}</span>
           </div>
         ))}
+      </section>
+
+      <section className="card" aria-labelledby="lage-h">
+        <h2 id="lage-h" className="sr-only">Bild und Lage</h2>
+        <div className="lage-grid">
+          <ObjektBild o={o} className="hero" label />
+          {o.lat !== null && o.lng !== null ? (
+            <Karte punkte={[{ id: o.id, lat: o.lat, lng: o.lng, genau: o.geo_genauigkeit !== 'ort', label: o.adresse ? o.adresse : o.ort, farbe: '#1D5B84' }]} hoehe={300} zoom={o.geo_genauigkeit === 'ort' ? 14 : 17} onVerschoben={markerVerschoben} />
+          ) : (
+            <div className="empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>{geoStatus !== null ? geoStatus : 'Keine Position'}</div>
+          )}
+        </div>
+        <div className="karte-legende" style={{ justifyContent: 'space-between' }}>
+          <span>{genauText}{o.lat !== null ? ' · Marker verschieben, um die Position zu korrigieren' : ''}{geoStatus !== null && o.lat !== null ? ' · ' + geoStatus : ''}</span>
+          <span style={{ gap: 14 }}>
+            {geoAdminLink !== null ? <a href={geoAdminLink} target="_blank" rel="noopener noreferrer">map.geo.admin.ch ↗</a> : null}
+            <label style={{ cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }}>{bildLaedt ? 'Lädt …' : (o.bild_pfad || o.bild_url ? 'Bild ersetzen' : 'Bild hochladen')}<input type="file" accept="image/*" onChange={bildHochladen} style={{ display: 'none' }} disabled={bildLaedt} /></label>
+          </span>
+        </div>
       </section>
 
       <div className="two-col">
@@ -282,7 +352,7 @@ export default function Detail() {
               {quellen.map((q) => (
                 <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-                    {q.url ? <a href={q.url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{q.makler}</a> : <span style={{ fontWeight: 600 }}>{q.makler}</span>}
+                    {q.url && quelleDirekt(q) ? <a href={q.url} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{q.makler} ↗</a> : <span style={{ fontWeight: 600 }}>{q.makler} <span className="chip link-fehlt" style={{ marginLeft: 6 }}>kein Direktlink</span></span>}
                     <span className="xs muted">{q.externe_id || ''}</span>
                   </div>
                   {q.kontakt ? <span className="small" style={{ color: 'var(--ink-2)' }}>{q.kontakt}</span> : null}

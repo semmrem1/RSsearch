@@ -3,6 +3,8 @@ import type { ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, typLabel } from '../lib/format';
 import { useApp } from '../state/AppContext';
 import { StarsText } from './Stars';
+import ObjektBild from './ObjektBild';
+import { quelleDirekt } from '../lib/links';
 
 export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
   const { profiles } = useApp();
@@ -33,9 +35,12 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
             return (
               <tr key={r.id}>
                 <td>
-                  <Link to={'/inserate/' + r.id} className="obj">
-                    <span style={{ fontWeight: 600 }}>{r.ort}{r.titel ? ' · ' + r.titel : ''}</span>
-                    <span className="muted small">{sub}</span>
+                  <Link to={'/inserate/' + r.id} className="obj" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    <ObjektBild o={r} className="thumb" />
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <span style={{ fontWeight: 600 }}>{r.ort}{r.titel ? ' · ' + r.titel : ''}</span>
+                      <span className="muted small">{sub}</span>
+                    </span>
                   </Link>
                 </td>
                 <td className="r">{r.zimmer !== null ? r.zimmer : '–'}</td>
@@ -53,7 +58,9 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                 <td className="r" style={{ color: 'var(--ink-2)' }}>{r.preis_chf !== null && r.flaeche_m2 ? chf(r.preis_chf / r.flaeche_m2) : '–'}</td>
                 <td>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {r.quellen.map((q) => <span key={q.id} className="chip outline">{q.makler}{q.externe_id ? ' ' + q.externe_id : ''}</span>)}
+                    {r.quellen.map((q) => (quelleDirekt(q) && q.url
+                      ? <a key={q.id} className="chip outline" href={q.url} target="_blank" rel="noopener noreferrer" title="Inserat beim Makler öffnen">{q.makler} ↗</a>
+                      : <span key={q.id} className="chip link-fehlt" title="Kein Direktlink zum Inserat hinterlegt">{q.makler} · kein Direktlink</span>))}
                     {r.markt_status !== 'aktiv' ? <span className="chip warm">{r.markt_status}</span> : null}
                   </div>
                 </td>
