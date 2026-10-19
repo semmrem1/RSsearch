@@ -23,7 +23,7 @@ npm run dev
 1. Cloudflare Dashboard > Workers & Pages > Create > Pages > Connect to Git > Repo `semmrem1/RSsearch`
 2. Build command: `npm run build`, Build output directory: `dist`
 3. Environment variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`
-4. Für React-Router: Datei `public/_redirects` ist bereits vorhanden (`/* /index.html 200`)
+4. React-Router: Cloudflare Pages liefert bei unbekannten Pfaden automatisch `index.html` aus (SPA-Fallback), keine `_redirects` nötig
 
 ## Datenbank
 
