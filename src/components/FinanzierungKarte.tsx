@@ -7,7 +7,7 @@ import type { Gemeinde, ObjektBudgetDaten } from '../lib/types';
 
 /** Finanzierung: Bank-Sicht (kalk. Zins) neben der effektiven Belastung (realer Zins, pro Objekt anpassbar) und Mittelbedarf beim Kauf. */
 export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, ort }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void; gemeinde: Gemeinde | null; ort: string }) {
-  const { haushalt } = useApp();
+  const { haushalt, leser } = useApp();
   const zinsOverride = daten !== null && daten.zins_effektiv !== undefined ? Number(daten.zins_effektiv) : null;
   const zinsEff = zinsOverride !== null ? zinsOverride : Number(haushalt.zins_effektiv);
   const [zinsText, setZinsText] = useState(String(zinsEff));
@@ -28,15 +28,17 @@ export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, o
     <>
       <div className="card-head">
         <h2 id="fin-h">Finanzierung</h2>
-        <label className="xs muted" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          Zins effektiv
-          <input className="input budget-input" style={{ width: 64 }} inputMode="decimal" aria-label="Effektiver Hypothekarzins für dieses Objekt" value={zinsText} onChange={(e) => setZinsText(e.target.value)} onBlur={zinsSetzen} onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }} />
-          %
-          {zinsOverride !== null ? <button type="button" className="linkbtn xs" title={'Zurück auf Standard ' + haushalt.zins_effektiv + ' %'} onClick={() => { if (daten !== null) { const neu = { ...daten }; delete neu.zins_effektiv; speichern(neu); } }}>↺</button> : null}
-        </label>
+        {leser ? <span className="xs muted">Zins effektiv {zinsEff} %</span> : (
+          <label className="xs muted" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            Zins effektiv
+            <input className="input budget-input" style={{ width: 64 }} inputMode="decimal" aria-label="Effektiver Hypothekarzins für dieses Objekt" value={zinsText} onChange={(e) => setZinsText(e.target.value)} onBlur={zinsSetzen} onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }} />
+            %
+            {zinsOverride !== null ? <button type="button" className="linkbtn xs" title={'Zurück auf Standard ' + haushalt.zins_effektiv + ' %'} onClick={() => { if (daten !== null) { const neu = { ...daten }; delete neu.zins_effektiv; speichern(neu); } }}>↺</button> : null}
+          </label>
+        )}
       </div>
       {t === null ? <div className="small muted" style={{ marginTop: 10 }}>Kein Preis bekannt.</div> : !eingerichtet ? (
-        <div className="notice" style={{ marginTop: 10 }}>Eigenkapital und Einkommen unter <Link to="/einstellungen">Einstellungen › Haushalt</Link> hinterlegen, dann rechnet die App Tragbarkeit und monatliche Belastung.</div>
+        <div className="notice" style={{ marginTop: 10 }}>{leser ? 'Eigenkapital und Einkommen sind noch nicht hinterlegt.' : <>Eigenkapital und Einkommen unter <Link to="/einstellungen">Einstellungen › Haushalt</Link> hinterlegen, dann rechnet die App Tragbarkeit und monatliche Belastung.</>}</div>
       ) : (
         <>
           <table className="fin-tabelle">
@@ -72,7 +74,7 @@ export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, o
 
       <h3 className="small" style={{ marginTop: 14, fontWeight: 600 }}>Gemeinde &amp; Steuern</h3>
       {gemeinde === null ? (
-        <div className="xs muted" style={{ marginTop: 6 }}>Keine Gemeindedaten für «{ort}». Unter <Link to="/einstellungen">Einstellungen › Gemeinden</Link> erfassen.</div>
+        <div className="xs muted" style={{ marginTop: 6 }}>Keine Gemeindedaten für «{ort}».{!leser ? <> Unter <Link to="/einstellungen">Einstellungen › Gemeinden</Link> erfassen.</> : null}</div>
       ) : (
         <table className="fin-tabelle">
           <tbody>

@@ -9,7 +9,7 @@ import FilterBar from '../components/FilterBar';
 import { filtern, useObjektFilter } from '../lib/filter';
 
 export default function Inserate() {
-  const { me, haushalt, profiles, budgetPosten } = useApp();
+  const { me, haushalt, profiles, budgetPosten, leser } = useApp();
   const { objekte, loading, reload, offlineStand } = useObjekte();
   const [filter, setFilter] = useObjektFilter('inserate');
   const [showForm, setShowForm] = useState(false);
@@ -24,7 +24,7 @@ export default function Inserate() {
           <h1>Inserate</h1>
           <p className="sub">Alle erfassten Objekte, inklusive ausgeschiedene</p>
         </div>
-        <button type="button" className="btn primary" onClick={() => setShowForm(true)}>+ Inserat manuell erfassen</button>
+        {!leser ? <button type="button" className="btn primary" onClick={() => setShowForm(true)}>+ Inserat manuell erfassen</button> : null}
       </div>
       <section className="card">
         <FilterBar objekte={objekte} wert={filter} onChange={setFilter} treffer={rows.length} />

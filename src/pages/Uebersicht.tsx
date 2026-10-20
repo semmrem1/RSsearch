@@ -14,7 +14,7 @@ import type { Aktivitaet, Snapshot } from '../lib/types';
 interface FeedItem { key: string; when: string; kind: string; cls: string; title: string; detail: string; objektId: string }
 
 export default function Uebersicht() {
-  const { profiles, me, haushalt, budgetPosten } = useApp();
+  const { profiles, me, haushalt, budgetPosten, leser } = useApp();
   const { objekte, loading, reload, offlineStand } = useObjekte();
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const [todos, setTodos] = useState<Aktivitaet[]>([]);
@@ -78,7 +78,7 @@ export default function Uebersicht() {
           <h1>Übersicht</h1>
           <p className="sub">Kauf · ab 4.5 Zimmer · ab 120 m² · bis CHF 2.5 Mio · Zürichsee, Obersee, Uster, Pfäffikon ZH</p>
         </div>
-        <button type="button" className="btn primary" onClick={() => setShowForm(true)}>+ Inserat manuell erfassen</button>
+        {!leser ? <button type="button" className="btn primary" onClick={() => setShowForm(true)}>+ Inserat manuell erfassen</button> : null}
       </div>
 
       <section className="kpis" aria-label="Kennzahlen">

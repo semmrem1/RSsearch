@@ -18,7 +18,7 @@ function Zahl({ id, label, wert, onChange, hinweis, einheit }: { id: string; lab
 }
 
 export default function Einstellungen() {
-  const { me, profiles, haushalt, budgetPosten, reloadStammdaten } = useApp();
+  const { me, profiles, haushalt, budgetPosten, reloadStammdaten, leser } = useApp();
   const [personen, setPersonen] = useState<Profile[]>([]);
   const [posten, setPosten] = useState<BudgetPosten[]>([]);
   const [neuPosten, setNeuPosten] = useState('');
@@ -127,6 +127,15 @@ export default function Einstellungen() {
     const { error } = await supabase.rpc('geheimnis_setzen', { p_name: 'anthropic_api_key', p_wert: apiKey.trim() });
     setKeyMeldung(error ? error.message : 'Gespeichert (verschlüsselt im Supabase Vault).');
     if (!error) { setApiKey(''); setGeheimnisse({ ...geheimnisse, anthropic_api_key: true }); }
+  }
+
+  if (leser) {
+    return (
+      <>
+        <div className="page-head"><div><h1>Einstellungen</h1><p className="sub">Nur Lesen</p></div></div>
+        <div className="notice">Dieses Konto darf nur lesen. Einstellungen, Bewertungen und Änderungen sind den Mitgliedern vorbehalten.</div>
+      </>
+    );
   }
 
   return (

@@ -8,7 +8,7 @@ import { StarsText } from '../components/Stars';
 import type { ObjektUebersicht, Stufe } from '../lib/types';
 
 export default function Pipeline() {
-  const { stufen, profiles } = useApp();
+  const { stufen, profiles, leser } = useApp();
   const { objekte, reload } = useObjekte();
   const [hideEmpty, setHideEmpty] = useState(false);
   const [onlyFav, setOnlyFav] = useState(false);
@@ -48,7 +48,7 @@ export default function Pipeline() {
       <div className="page-head">
         <div>
           <h1>Pipeline</h1>
-          <p className="sub">Ein gemeinsamer Prozess pro Objekt · Karten per Drag &amp; Drop verschieben oder über das Menü in der Karte</p>
+          <p className="sub">{leser ? 'Ein gemeinsamer Prozess pro Objekt' : 'Ein gemeinsamer Prozess pro Objekt · Karten per Drag & Drop verschieben oder über das Menü in der Karte'}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="btn md" aria-pressed={hideEmpty} onClick={() => setHideEmpty(!hideEmpty)} style={hideEmpty ? { background: 'var(--accent-soft)', borderColor: 'var(--accent)' } : undefined}>Leere Stufen ausblenden</button>
@@ -93,7 +93,7 @@ export default function Pipeline() {
                           <div
                             key={o.id}
                             className="kcard"
-                            draggable
+                            draggable={!leser}
                             onDragStart={(e) => { e.dataTransfer.setData('text/objekt', o.id); e.dataTransfer.effectAllowed = 'move'; setDragId(o.id); }}
                             onDragEnd={() => { setDragId(null); setOver(null); }}
                           >
@@ -109,10 +109,14 @@ export default function Pipeline() {
                               })}
                             </div>
                             {next ? <span className="chip accent" style={{ whiteSpace: 'normal' }}>{next}</span> : null}
-                            <label className="sr-only" htmlFor={'mv-' + o.id}>Stufe wechseln</label>
-                            <select id={'mv-' + o.id} className="select" style={{ minHeight: 32, fontSize: 12, padding: '0 8px' }} value={o.stufe_code} onChange={(e) => move(o.id, e.target.value)}>
-                              {stufen.map((x) => <option key={x.code} value={x.code}>{x.name}</option>)}
-                            </select>
+                            {!leser ? (
+                              <>
+                                <label className="sr-only" htmlFor={'mv-' + o.id}>Stufe wechseln</label>
+                                <select id={'mv-' + o.id} className="select" style={{ minHeight: 32, fontSize: 12, padding: '0 8px' }} value={o.stufe_code} onChange={(e) => move(o.id, e.target.value)}>
+                                  {stufen.map((x) => <option key={x.code} value={x.code}>{x.name}</option>)}
+                                </select>
+                              </>
+                            ) : null}
                           </div>
                         );
                       })}

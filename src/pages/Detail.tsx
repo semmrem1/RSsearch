@@ -24,7 +24,7 @@ import type { Objekt, Quelle, Snapshot, Aktivitaet, Dokument, Standortfaktor, Ak
 export default function Detail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { me, profiles, stufen, stufeByCode, haushalt, budgetPosten } = useApp();
+  const { me, profiles, stufen, stufeByCode, haushalt, budgetPosten, leser } = useApp();
   const { daten: budgetDaten, speichern: budgetSpeichern } = useObjektBudget(id);
   const [o, setO] = useState<Objekt | null>(null);
   const [quellen, setQuellen] = useState<Quelle[]>([]);
@@ -86,12 +86,13 @@ export default function Detail() {
   useEffect(() => {
     if (o === null || me === null) { return; }
     if (o.zusammengefuehrt_in) { nav('/inserate/' + o.zusammengefuehrt_in, { replace: true }); return; }
+    if (leser) { return; }
     supabase.from('objekt_besuche').upsert({ objekt_id: o.id, user_id: me.id, zuletzt: new Date().toISOString() }).then(() => undefined);
   }, [o === null ? null : o.id, o === null ? null : o.zusammengefuehrt_in, me === null ? null : me.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Koordinaten fehlen oder Adresse geändert: hier direkt ermitteln
   useEffect(() => {
-    if (o === null || o.geo_genauigkeit === 'manuell') { return; }
+    if (o === null || o.geo_genauigkeit === 'manuell' || leser) { return; }
     if (o.lat !== null && o.geo_suchtext === geoSuchtext(o)) { return; }
     let ab = false;
     setGeoStatus('Adresse wird gesucht …');
@@ -233,11 +234,15 @@ export default function Detail() {
           ) : (
             <span className="chip link-fehlt" style={{ padding: '10px 12px' }} title="Kein Direktlink hinterlegt, wird beim nächsten Lauf ergänzt">Kein Direktlink zum Inserat</span>
           )}
-          <button type="button" className="btn" style={{ minHeight: 44 }} onClick={() => setZfOffen(true)} title="Dublette manuell zusammenführen">Zusammenführen</button>
-          <label htmlFor="stufe-sel" className="sr-only">Stufe wechseln</label>
-          <select id="stufe-sel" className="select" style={{ width: 'auto', minHeight: 44 }} value={o.stufe_code} onChange={(e) => changeStufe(e.target.value)}>
-            {stufen.map((s) => <option key={s.code} value={s.code}>{s.phase_name} · {s.name}</option>)}
-          </select>
+          {!leser ? (
+            <>
+              <button type="button" className="btn" style={{ minHeight: 44 }} onClick={() => setZfOffen(true)} title="Dublette manuell zusammenführen">Zusammenführen</button>
+              <label htmlFor="stufe-sel" className="sr-only">Stufe wechseln</label>
+              <select id="stufe-sel" className="select" style={{ width: 'auto', minHeight: 44 }} value={o.stufe_code} onChange={(e) => changeStufe(e.target.value)}>
+                {stufen.map((s) => <option key={s.code} value={s.code}>{s.phase_name} · {s.name}</option>)}
+              </select>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -252,16 +257,16 @@ export default function Detail() {
         <div className="lage-grid">
           <ObjektBild o={o} className="hero" label />
           {o.lat !== null && o.lng !== null ? (
-            <Karte punkte={[{ id: o.id, lat: o.lat, lng: o.lng, genau: o.geo_genauigkeit !== 'ort', label: o.adresse ? o.adresse : o.ort, farbe: '#1D5B84' }]} hoehe={300} zoom={o.geo_genauigkeit === 'ort' ? 14 : 17} onVerschoben={markerVerschoben} />
+            <Karte punkte={[{ id: o.id, lat: o.lat, lng: o.lng, genau: o.geo_genauigkeit !== 'ort', label: o.adresse ? o.adresse : o.ort, farbe: '#1D5B84' }]} hoehe={300} zoom={o.geo_genauigkeit === 'ort' ? 14 : 17} onVerschoben={leser ? undefined : markerVerschoben} />
           ) : (
             <div className="empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>{geoStatus !== null ? geoStatus : 'Keine Position'}</div>
           )}
         </div>
         <div className="karte-legende" style={{ justifyContent: 'space-between' }}>
-          <span>{genauText}{o.lat !== null ? ' · Marker verschieben, um die Position zu korrigieren' : ''}{geoStatus !== null && o.lat !== null ? ' · ' + geoStatus : ''}</span>
+          <span>{genauText}{o.lat !== null && !leser ? ' · Marker verschieben, um die Position zu korrigieren' : ''}{geoStatus !== null && o.lat !== null ? ' · ' + geoStatus : ''}</span>
           <span style={{ gap: 14 }}>
             {geoAdminLink !== null ? <a href={geoAdminLink} target="_blank" rel="noopener noreferrer">map.geo.admin.ch ↗</a> : null}
-            <label style={{ cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }}>{bildLaedt ? 'Lädt …' : (o.bild_pfad || o.bild_url ? 'Bild ersetzen' : 'Bild hochladen')}<input type="file" accept="image/*" onChange={bildHochladen} style={{ display: 'none' }} disabled={bildLaedt} /></label>
+            {!leser ? <label style={{ cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }}>{bildLaedt ? 'Lädt …' : (o.bild_pfad || o.bild_url ? 'Bild ersetzen' : 'Bild hochladen')}<input type="file" accept="image/*" onChange={bildHochladen} style={{ display: 'none' }} disabled={bildLaedt} /></label> : null}
           </span>
         </div>
         <Galerie objektId={o.id} version={galerieVersion} />
@@ -357,7 +362,7 @@ export default function Detail() {
 
           <section className="card pad" aria-labelledby="tl-h">
             <div className="card-head"><h2 id="tl-h">Verlauf &amp; Aktivitäten</h2><span className="small muted">Automatisch und manuell, chronologisch</span></div>
-            <form onSubmit={saveAkt} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
+            {!leser ? <form onSubmit={saveAkt} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
               <label htmlFor="note" className="sr-only">Neue Aktivität</label>
               <textarea id="note" className="textarea" rows={2} placeholder="Notiz, Anruf, Mail … (sichtbar für beide)" value={aText} onChange={(e) => setAText(e.target.value)} style={{ flex: '1 1 320px' }} />
               <select className="select" aria-label="Aktivitätstyp" value={aTyp} onChange={(e) => setATyp(e.target.value as AktivitaetTyp)} style={{ width: 'auto', minHeight: 44 }}>
@@ -365,7 +370,7 @@ export default function Detail() {
               </select>
               <input className="input" type="datetime-local" aria-label="Fällig am (optional)" value={aFaellig} onChange={(e) => setAFaellig(e.target.value)} style={{ width: 'auto', minHeight: 44 }} />
               <button type="submit" className="btn primary" disabled={!aText.trim()}>Speichern</button>
-            </form>
+            </form> : null}
             <div className="rows" style={{ marginTop: 10 }}>
               {akt.length === 0 ? <div className="empty">Noch keine Aktivitäten.</div> : null}
               {akt.map((a) => (
@@ -376,7 +381,7 @@ export default function Detail() {
                       <span style={{ fontWeight: 600 }}>{a.titel}</span>
                       <span className="xs muted tnum">{dateTime(a.datum)}</span>
                       {a.faellig_am !== null ? (
-                        <button type="button" className={'chip ' + (a.erledigt ? 'neutral' : 'accent')} style={{ border: 'none', cursor: 'pointer' }} onClick={() => toggleDone(a)} title="Erledigt umschalten">
+                        <button type="button" className={'chip ' + (a.erledigt ? 'neutral' : 'accent')} style={{ border: 'none', cursor: leser ? 'default' : 'pointer' }} onClick={() => { if (!leser) { toggleDone(a); } }} disabled={leser} title={leser ? undefined : 'Erledigt umschalten'}>
                           {a.erledigt ? '✓ erledigt' : 'fällig ' + dateTime(a.faellig_am)}
                         </button>
                       ) : null}
@@ -411,7 +416,7 @@ export default function Detail() {
           <section className="card pad" aria-labelledby="doc-h">
             <div className="card-head">
               <h2 id="doc-h">Dokumente</h2>
-              <label className="btn sm" style={{ cursor: 'pointer' }}>{uploading ? 'Lädt …' : '+ Hochladen'}<input type="file" multiple accept=".pdf,image/*" onChange={upload} style={{ display: 'none' }} disabled={uploading} /></label>
+              {!leser ? <label className="btn sm" style={{ cursor: 'pointer' }}>{uploading ? 'Lädt …' : '+ Hochladen'}<input type="file" multiple accept=".pdf,image/*" onChange={upload} style={{ display: 'none' }} disabled={uploading} /></label> : null}
             </div>
             <div className="rows" style={{ marginTop: 8 }}>
               {docs.map((d) => (
@@ -421,7 +426,7 @@ export default function Detail() {
                     <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
                     <span className="xs muted">{dateShort(d.created_at)} · {bytes(d.groesse_bytes)}{extrakte.some((x) => x.dokument_id === d.id) ? ' · ausgewertet' : ''}</span>
                   </span>
-                  {d.mime === 'application/pdf' || /\.pdf$/i.test(d.name) ? (
+                  {!leser && (d.mime === 'application/pdf' || /\.pdf$/i.test(d.name)) ? (
                     <span className="chip accent" role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); if (extrahiere === null) { extrahieren(d); } }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); extrahieren(d); } }}>
                       {extrahiere === d.id ? 'Liest …' : extrakte.some((x) => x.dokument_id === d.id) ? 'Neu auswerten' : 'Kennzahlen'}
                     </span>
@@ -454,13 +459,13 @@ export default function Detail() {
                 })}
               </div>
             ) : null}
-            <div className="stage-empty" style={{ marginTop: 10 }}>Exposé-PDF hochladen und «Kennzahlen» antippen: Claude liest Baujahr, Nebenkosten, Erneuerungsfonds und mehr aus</div>
+            {!leser ? <div className="stage-empty" style={{ marginTop: 10 }}>Exposé-PDF hochladen und «Kennzahlen» antippen: Claude liest Baujahr, Nebenkosten, Erneuerungsfonds und mehr aus</div> : null}
           </section>
 
           <section className="card pad" aria-labelledby="loc-h">
             <h2 id="loc-h">Standortfaktoren</h2>
             <div className="rows" style={{ marginTop: 8 }}>
-              {loc.length === 0 ? <div className="small muted" style={{ padding: '10px 0' }}>Noch nicht recherchiert. Claude im Chat darum bitten, dann erscheinen die Faktoren hier.</div> : null}
+              {loc.length === 0 ? <div className="small muted" style={{ padding: '10px 0' }}>{leser ? 'Noch nicht recherchiert.' : 'Noch nicht recherchiert. Claude im Chat darum bitten, dann erscheinen die Faktoren hier.'}</div> : null}
               {loc.map((l) => (
                 <div key={l.id} className="small" style={{ display: 'flex', gap: 10, padding: '8px 0' }}>
                   <span className="dot" style={{ flex: '0 0 8px', marginTop: 6, background: l.bewertung === 'positiv' ? 'var(--green)' : l.bewertung === 'negativ' ? 'var(--warm)' : 'var(--amber)' }} />

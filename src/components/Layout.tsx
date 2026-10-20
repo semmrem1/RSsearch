@@ -26,7 +26,7 @@ export function Avatar({ id, size }: { id: string | null; size?: 'sm' }) {
 }
 
 export default function Layout() {
-  const { me, profiles } = useApp();
+  const { me, profiles, leser } = useApp();
   const [lastRun, setLastRun] = useState<LaufProtokoll[] | null>(null);
 
   useEffect(() => {
@@ -61,9 +61,9 @@ export default function Layout() {
               <span className="dot" style={{ background: runOk ? 'var(--green)' : 'var(--amber)' }} />
               <span>{runText}</span>
             </Link>
-            <NavLink to="/einstellungen" className="btn sm" aria-label="Einstellungen" title="Einstellungen">
+            {!leser ? <NavLink to="/einstellungen" className="btn sm" aria-label="Einstellungen" title="Einstellungen">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
-            </NavLink>
+            </NavLink> : <span className="chip neutral" title="Dieses Konto darf nur lesen">Nur Lesen</span>}
             <div className="avatars">
               {profiles.map((p) => <Avatar key={p.id} id={p.id} />)}
             </div>

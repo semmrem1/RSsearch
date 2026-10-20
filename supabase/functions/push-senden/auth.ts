@@ -30,6 +30,9 @@ export async function berechtigt(req: Request, a: SupabaseClient): Promise<{ ok:
   if (token === '') { return { ok: false, userId: null }; }
   const { data, error } = await a.auth.getUser(token);
   if (error || !data.user) { return { ok: false, userId: null }; }
+  // Leser dürfen nichts auslösen (kein Push, keine Bilder, keine Extraktion, keine Pendelzeiten)
+  const { data: profil } = await a.from('profiles').select('rolle').eq('id', data.user.id).maybeSingle();
+  if (profil !== null && (profil as { rolle: string }).rolle === 'leser') { return { ok: false, userId: data.user.id }; }
   return { ok: true, userId: data.user.id };
 }
 

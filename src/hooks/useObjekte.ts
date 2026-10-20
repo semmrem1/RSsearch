@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { geocode, geoSuchtext } from '../lib/geo';
 import { direktQuelle } from '../lib/links';
 import type { ObjektUebersicht } from '../lib/types';
+import { useApp } from '../state/AppContext';
 
 // Pro Browser-Session nur einmal pro Objekt versuchen (Seitenwechsel, StrictMode)
 const geoVersucht = new Set<string>();
@@ -32,6 +33,7 @@ function cacheLesen(): { daten: ObjektUebersicht[]; stand: string } | null {
 }
 
 export function useObjekte() {
+  const { leser } = useApp();
   const [objekte, setObjekte] = useState<ObjektUebersicht[]>(() => { const c = cacheLesen(); return c !== null ? c.daten : []; });
   const [loading, setLoading] = useState(() => cacheLesen() === null);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function useObjekte() {
 
   // Fehlende Koordinaten im Hintergrund ermitteln und in der DB ablegen
   useEffect(() => {
-    if (loading) { return; }
+    if (loading || leser) { return; }
     const offen = objekte.filter((o) => brauchtGeo(o) && !geoVersucht.has(o.id));
     if (offen.length === 0) { return; }
     let abgebrochen = false;
@@ -91,7 +93,7 @@ export function useObjekte() {
 
   // Fehlende Haupt- und Galeriebilder serverseitig sichern lassen (einmal pro Session)
   useEffect(() => {
-    if (loading || bildLaufGestartet || objekte.length === 0) { return; }
+    if (loading || leser || bildLaufGestartet || objekte.length === 0) { return; }
     bildLaufGestartet = true;
     const brauchtHaupt = objekte.some(brauchtBild);
     supabase.functions.invoke('bild-sichern', { body: { limit: brauchtHaupt ? 20 : 10 } }).then(({ data }) => {

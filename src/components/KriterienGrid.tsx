@@ -10,7 +10,7 @@ import type { Bewertung, Kriterium, KriterienBewertung } from '../lib/types';
  * Dazu pro Person ein «Gefühl» (Sterne), Notiz, Tags und die Markierungen Favorit / Uninteressant (Tabelle bewertungen).
  */
 export default function KriterienGrid({ objektId, onChange }: { objektId: string; onChange?: () => void }) {
-  const { me, profiles } = useApp();
+  const { me, profiles, leser } = useApp();
   const [kriterien, setKriterien] = useState<Kriterium[]>([]);
   const [werte, setWerte] = useState<KriterienBewertung[]>([]);
   const [bew, setBew] = useState<Bewertung[]>([]);
@@ -141,6 +141,7 @@ export default function KriterienGrid({ objektId, onChange }: { objektId: string
       </div>
       {uneinig ? <div className="notice" style={{ marginTop: 10 }}>Ihr liegt deutlich auseinander. Dieses Objekt lohnt ein Gespräch.</div> : null}
 
+      {leser ? <div className="xs muted" style={{ marginTop: 10 }}>Nur Lesen: Bewertungen sind den Mitgliedern vorbehalten.</div> : null}
       <div className="krit-personen">
         {profiles.map((p) => {
           const b = bew.find((x) => x.user_id === p.id);

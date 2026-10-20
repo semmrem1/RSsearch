@@ -1,4 +1,4 @@
-# Übergabe: Ausbau RSsearch (Stand 20.10.2026, 08:10)
+# Übergabe: Ausbau PRimmo / RSsearch (Stand 20.10.2026, 10:00)
 
 Alle Verbesserungsvorschläge, die Budgetrechnung und der «Entscheid auf einen Blick» sind umgesetzt und auf `main` gemergt (Cloudflare deployt automatisch). Branch `ausbau` ist identisch mit `main`. Letzter Commit: siehe `git log`.
 
@@ -19,6 +19,8 @@ Alle Verbesserungsvorschläge, die Budgetrechnung und der «Entscheid auf einen 
 - Ampel-Auswertung (20.10., 2. Runde): `ampel()` liefert `pruefungen[]` (Markt, Eigenkapital, Tragbarkeit, Budget, Score, Einigkeit, Markierung mit Stufe ok/gelb/rot/offen und Text); `AmpelInfo` zeigt sie als Popover (Hover, Fokus, Tap; Portal in body, damit die Tabelle nichts abschneidet)
 - Inseratsseite neu geordnet: Bild + Karte, KPI-Leiste, Finanzierung / Budget / Kriterien, dann Verlauf, Aktivitäten, Quellen, Dokumente, Standortfaktoren
 - «Bewertung pro Person» ersetzt durch «Kriterien & Bewertung»: Gefühl-Sterne (`bewertungen.sterne`), Notiz, Tags, Favorit, Uninteressant pro Person in `KriterienGrid`
+- App heisst PRimmo (Header, Login, Tab, Manifest, Push-Titel); Profil «Remo Semm»
+- Leser-Rolle (20.10.): Dieter Semm (dieter.semm@bluewin.ch, `profiles.rolle = 'leser'`) darf nur lesen. Migration `20261020_leser_rolle.sql`: `ist_leser()`, `nur_mitglieder()`, alle `_auth_all`-Richtlinien auf `not ist_leser()` plus `_leser_select`, eigene Bewertungs-/Besuchs-/Push-Richtlinien gesperrt, Storage-Insert/Update gesperrt, RPCs geschützt, `revoke execute` der Lauf-Funktionen für `authenticated`. Edge Functions (`auth.ts`) weisen Leser ab. App: `useApp().leser`, `profiles` = nur Mitglieder, `alleProfiles` für Avatare. Weitere Leser: `update public.profiles set rolle = 'leser' where id = '<uuid>'`
 - Gemeinde & Steuern in Finanzierung (Tabelle) und Budget (Hinweis beim Posten mit «Steuer» im Namen); Steuerfuss in der Übersicht unter dem Objekt (Desktop und Mobile)
 
 ## Noch zu tun (nächste Session)

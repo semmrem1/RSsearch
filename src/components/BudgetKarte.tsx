@@ -21,7 +21,7 @@ function Betrag({ wert, onChange, breit, aria }: { wert: number; onChange: (v: n
 
 /** Monatsbudget pro Objekt: Standardwerte aus den Einstellungen, Überschreibungen in objekt_budget. */
 export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void; gemeinde: Gemeinde | null }) {
-  const { haushalt, profiles, budgetPosten } = useApp();
+  const { haushalt, profiles, budgetPosten, leser } = useApp();
   const [extraName, setExtraName] = useState('');
   const [extraBetrag, setExtraBetrag] = useState('');
 
@@ -65,7 +65,7 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
   return (
     <div className="budget">
       {!b.vollstaendig ? (
-        <div className="notice" style={{ marginBottom: 12 }}>Nettolohn und Pensum unter <Link to="/einstellungen">Einstellungen › Budget</Link> hinterlegen, dann rechnet die Tabelle mit euren Zahlen. Ausgaben kannst du hier trotzdem schon erfassen.</div>
+        <div className="notice" style={{ marginBottom: 12 }}>{leser ? 'Nettolohn und Pensum sind noch nicht hinterlegt.' : <>Nettolohn und Pensum unter <Link to="/einstellungen">Einstellungen › Budget</Link> hinterlegen, dann rechnet die Tabelle mit euren Zahlen. Ausgaben kannst du hier trotzdem schon erfassen.</>}</div>
       ) : null}
 
       <div className="budget-block">
@@ -74,9 +74,13 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
           <div key={p.id} className="budget-zeile">
             <span><span style={{ color: p.farbe, fontWeight: 600 }}>{p.name}</span> <span className="xs muted">netto {chf(p.nettolohn100)} bei 100 %</span></span>
             <span className="budget-pensum">
-              <Betrag wert={p.pensum} onChange={(v) => setPensum(p.id, Math.max(0, Math.min(100, v)))} aria={'Pensum ' + p.name} />
-              <span className="xs muted">%</span>
-              {p.pensum !== p.standardPensum ? <button type="button" className="linkbtn xs" onClick={() => setPensum(p.id, p.standardPensum)} title="Zurück auf Standard">↺</button> : null}
+              {leser ? <span className="tnum">{p.pensum} %</span> : (
+                <>
+                  <Betrag wert={p.pensum} onChange={(v) => setPensum(p.id, Math.max(0, Math.min(100, v)))} aria={'Pensum ' + p.name} />
+                  <span className="xs muted">%</span>
+                  {p.pensum !== p.standardPensum ? <button type="button" className="linkbtn xs" onClick={() => setPensum(p.id, p.standardPensum)} title="Zurück auf Standard">↺</button> : null}
+                </>
+              )}
             </span>
             <span className="tnum">{chf(p.betrag)}</span>
           </div>
@@ -86,7 +90,7 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
 
       <div className="budget-block">
         <div className="budget-kopf"><span>Wohnkosten dieses Objekts</span><span className="tnum">− CHF {chf(b.wohnen.total)}</span></div>
-        <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)} · Zins oben bei «Finanzierung» anpassbar</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
+        <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)}{leser ? '' : ' · Zins oben bei «Finanzierung» anpassbar'}</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
         <div className="budget-zeile"><span>Nebenkosten, Unterhalt <span className="xs muted">{haushalt.nebenkosten_pct} % vom Preis</span></span><span /><span className="tnum">{chf(b.wohnen.nebenkosten)}</span></div>
         <div className="budget-zeile"><span>Amortisation 2. Hypothek <span className="xs muted">auf 65 % in {haushalt.amortisation_jahre} Jahren</span></span><span /><span className="tnum">{chf(b.wohnen.amortisation)}</span></div>
       </div>
@@ -97,22 +101,22 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
           <div key={z.id} className="budget-zeile">
             <span>{z.name}{z.ueberschrieben && z.id.indexOf('extra-') !== 0 ? <span className="xs muted"> · Standard {chf(z.standard)}</span> : null}{steuerText !== null && /steuer/i.test(z.name) ? <span className="xs muted"> · {steuerText}, Betrag für diese Gemeinde hier anpassen</span> : null}</span>
             <span className="budget-pensum">
-              {z.id.indexOf('extra-') === 0
+              {leser ? null : z.id.indexOf('extra-') === 0
                 ? <button type="button" className="linkbtn xs" onClick={() => setExtra(Number(z.id.slice(6)), null)} title="Entfernen">✕</button>
                 : (z.ueberschrieben ? <button type="button" className="linkbtn xs" onClick={() => setPosten(z.id, z.standard)} title="Zurück auf Standard">↺</button> : null)}
             </span>
-            <Betrag wert={z.betrag} breit aria={z.name} onChange={(v) => (z.id.indexOf('extra-') === 0 ? setExtra(i - budgetPosten.length, v) : setPosten(z.id, v))} />
+            {leser ? <span className="tnum">{chf(z.betrag)}</span> : <Betrag wert={z.betrag} breit aria={z.name} onChange={(v) => (z.id.indexOf('extra-') === 0 ? setExtra(i - budgetPosten.length, v) : setPosten(z.id, v))} />}
           </div>
         ))}
-        {!steuerPosten && steuerText !== null ? <div className="budget-zeile"><span className="xs muted">{steuerText}. Posten «Steuern» unter Einstellungen › Budget erfassen, dann lässt er sich hier pro Gemeinde anpassen.</span><span /><span /></div> : null}
-        <div className="budget-zeile budget-neu">
+        {!steuerPosten && steuerText !== null ? <div className="budget-zeile"><span className="xs muted">{steuerText}.{!leser ? ' Posten «Steuern» unter Einstellungen › Budget erfassen, dann lässt er sich hier pro Gemeinde anpassen.' : ''}</span><span /><span /></div> : null}
+        {!leser ? <div className="budget-zeile budget-neu">
           <input className="input" placeholder="Weiterer Posten für dieses Objekt" aria-label="Posten" value={extraName} onChange={(e) => setExtraName(e.target.value)} />
           <span />
           <span style={{ display: 'flex', gap: 6 }}>
             <input className="input budget-input" style={{ width: 110 }} inputMode="numeric" placeholder="CHF" aria-label="Betrag" value={extraBetrag} onChange={(e) => setExtraBetrag(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { extraHinzu(); } }} />
             <button type="button" className="btn sm" onClick={extraHinzu} disabled={extraName.trim() === '' || extraBetrag.trim() === ''}>+</button>
           </span>
-        </div>
+        </div> : null}
       </div>
 
       <div className="budget-summe" style={{ color: ueberschussFarbe(b) }}>
@@ -120,11 +124,11 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
         <span className="tnum">{b.ueberschuss < 0 ? '−' : ''}CHF {chf(Math.abs(b.ueberschuss))}{b.sparquote !== null ? <span className="xs" style={{ fontWeight: 400, marginLeft: 8 }}>{(b.sparquote * 100).toFixed(0)} % vom Einkommen</span> : null}</span>
       </div>
       <div className="xs muted" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <span>{istStandard ? 'Standardwerte aus den Einstellungen' : 'Für dieses Objekt angepasste Werte (gelb markierbar per ↺ zurück)'}</span>
-        <span style={{ display: 'flex', gap: 12 }}>
+        <span>{istStandard ? 'Standardwerte aus den Einstellungen' : 'Für dieses Objekt angepasste Werte' + (leser ? '' : ' (per ↺ zurück)')}</span>
+        {!leser ? <span style={{ display: 'flex', gap: 12 }}>
           {!istStandard ? <button type="button" className="linkbtn xs" onClick={() => speichern({})}>Alles auf Standard</button> : null}
           <Link to="/einstellungen">Standardwerte ändern</Link>
-        </span>
+        </span> : null}
       </div>
     </div>
   );

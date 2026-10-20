@@ -1,11 +1,14 @@
 export type MarktStatus = 'aktiv' | 'reserviert' | 'verkauft' | 'offline' | 'unbekannt';
 export type ObjektTyp = 'wohnung' | 'haus' | 'andere';
 
+export type Rolle = 'mitglied' | 'leser';
+
 export interface Profile {
   id: string;
   name: string;
   kuerzel: string;
   farbe: string;
+  rolle: Rolle;
   arbeitsort?: string | null;
   arbeitsort_lat?: number | null;
   arbeitsort_lng?: number | null;
