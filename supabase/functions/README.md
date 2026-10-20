@@ -6,3 +6,4 @@
 - `expose-extrahieren`: Kennzahlen aus Exposé-PDF via Claude API (Vault `anthropic_api_key`)
 
 `auth.ts` ist in jedem Ordner identisch (Deploy über MCP erlaubt keine gemeinsamen Ordner). Berechtigt ist ein gültiges Session-Token der App oder der Header `x-app-secret` (Vault `app_secret`), den `public.edge_aufruf()` aus SQL mitschickt. Alle Functions sind mit `verify_jwt = false` deployt, die Prüfung passiert in `auth.ts`.
+- `baugesuche-abruf`: Neubau-Radar, Baugesuche aus Amtsblatt ZH/SZ und Publikationen SG (täglich per pg_cron)

@@ -59,12 +59,12 @@ Also fill missing photos where you have them: update public.objekte set bild_url
 Mention any listing you could not fix in the push.
 
 DETERMINING WHAT CHANGED TODAY (run after all upserts):
-  select s.typ, o.ort, o.adresse, o.zimmer, o.flaeche_m2, o.preis_chf, s.alt, s.neu, (select string_agg(q.makler || ' ' || coalesce(q.url, ''), ', ') from public.objekt_quellen q where q.objekt_id = o.id) as quellen from public.snapshots s join public.objekte o on o.id = s.objekt_id where s.typ in ('erfasst','preis','status','neue_quelle') and s.datum::date = current_date order by s.typ, o.ort;
+  select s.typ, o.id as objekt_id, o.ort, o.adresse, o.zimmer, o.flaeche_m2, o.preis_chf, s.alt, s.neu, (select string_agg(q.makler || ' ' || coalesce(q.url, ''), ', ') from public.objekt_quellen q where q.objekt_id = o.id) as quellen from public.snapshots s join public.objekte o on o.id = s.objekt_id where s.typ in ('erfasst','preis','status','neue_quelle') and s.datum::date = current_date order by s.typ, o.ort;
 'erfasst' = new object today, 'preis' = price change (alt -> neu), 'status' = went offline (neu = 'offline', i.e. no longer found today) / reserved / sold / back online, 'neue_quelle' = known object now also listed by another agency.
 
 OUTPUT:
 - App push (Web Push to both phones via the app): for every NEW object today call
-    select public.push_senden('Neu: <Ort>, <Zi> Zi, <m²> m²', 'CHF <Preis> · <Makler>' , '/inserate/<objekt uuid>');
+    select public.push_senden('Neu: <Ort>, <Zi> Zi, <m²> m²', 'CHF <Preis> · <Makler>', '/inserate/<objekt uuid>');
   and for every price DROP today call
     select public.push_senden('Preis gesenkt: <Ort>', 'CHF <alt> → CHF <neu> (<-x %>)', '/inserate/<objekt uuid>');
   and for listings taken offline today ONE combined push: select public.push_senden('<n> Inserate offline', '<Ort, Preis; …>', '/inserate');
@@ -73,3 +73,27 @@ OUTPUT:
 - If nothing changed: no push notification, just finish quietly.
 - Never fabricate listings or URLs. If a site cannot be read, log it in lauf_protokoll with geprueft=false and move on. If the Chrome extension and the built-in browser both fail for 3+ consecutive days (check lauf_protokoll), mention it in the push.
 - Do not write to memory files for this task anymore; the database replaces them.
+
+NEUBAU-RADAR (do this after the agencies, before OUTPUT). Goal: find new-build projects (Neubauprojekte, Eigentum) in the target region EARLY, i.e. from the building permit (Baugesuch) on, long before they appear on portals. Region = the active rows of public.radar_gemeinden (select name, kanton from public.radar_gemeinden where aktiv). Budget filter for projects: units with 4.5+ rooms / 120+ m2 for CHF 2'500'000 or less are relevant; projects with only small flats, rentals or prices clearly above budget get phase 'miete' or 'uninteressant' (never delete).
+1. BAUGESUCHE: they are loaded automatically every morning at 07:15 by pg_cron (Edge Function baugesuche-abruf: Amtsblatt ZH via API, Amtsblatt SZ via API, Publikationen SG via HTML; private persons are never stored). Check that it ran today:
+     select makler, geprueft, anzahl_inserate, neue, fehler from public.lauf_protokoll where makler like 'Baugesuche %' and gestartet_am::date = current_date;
+   If a row is missing or has fehler, trigger it once and check again after ~60 s:  select public.baugesuche_abrufen();
+2. NEW WOHNBAU BAUGESUCHE: list the relevant new ones (last 3 days, not yet linked):
+     select id, gemeinde, ortsteil, adresse, beschreibung, bauherr, projektverfasser, wohnungen, publiziert_am, url from public.baugesuche where relevanz = 'hoch' and neubauprojekt_id is null and status = 'neu' and erfasst_am > now() - interval '3 days' order by publiziert_am desc;
+   For each one (max 10 per run): do 1 to 2 WebSearch queries (address + Gemeinde + "Neubau" / "Eigentumswohnungen", and the Bauherr name if it is a company) to find out whether a sales project already exists (project website, Vermarkter page, Homegate/ImmoScout/Newhome new-build listing).
+   - Found a sales or pre-registration (Vormerkung/Interessentenliste) project: create or update it and link the Baugesuch:
+       select public.neubauprojekt_melden('{"name":"<Projektname>","gemeinde":"<Gemeinde exactly as in radar_gemeinden>","kanton":"ZH","adresse":"<Strasse Nr>","phase":"vormerkung|verkauf","typ":"Wohnungen|Reihenhäuser|Doppeleinfamilienhäuser","einheiten":8,"zimmer_von":3.5,"zimmer_bis":5.5,"flaeche_von":95,"flaeche_bis":160,"preis_ab":1450000,"preis_bis":2400000,"bezug":"Sommer 2028","bauherr":"<Firma>","vermarkter":"<Firma>","kontakt":"<Firma/Telefon/E-Mail of the sales office>","website":"https://…","quelle_url":"https://…"}'::jsonb);
+       select public.baugesuch_zuordnen('<baugesuch id>'::uuid, '<projekt uuid>'::uuid);
+   - Clearly a large multi-unit residential project (Mehrfamilienhaus with 4+ units, Reihenhäuser, Überbauung, Gestaltungsplan) but nothing published yet: create it with phase 'geplant' and a name like '<Strasse>, <Gemeinde>' and link the Baugesuch the same way.
+   - Single-family house of a private owner, renovations, rentals by a Genossenschaft/Pensionskasse/Anlagestiftung (these build for rent almost always): set status so it does not come back:  update public.baugesuche set status = 'gesichtet' where id = '<id>';
+   Only store company names and sales contacts that are published by the company itself; never store private persons. Never invent projects, prices or URLs.
+3. NEW-BUILD SOURCES (check daily, WebFetch works): 
+   - ZKB Baupromotionen https://www.zkb.ch/de/lps/private/finanzieren/baupromotionen.html (all projects whose town is in radar_gemeinden)
+   - B2S Immobilien https://b2s-immobilien.com/de/angebote
+   - Neue Homegate/ImmoScout new-build listings already reach the DB via MoneyPark: every NEW object today with baujahr >= current year or the words Neubau/Erstbezug/Projekt in its title belongs to a project: find/create the project (neubauprojekt_melden with website = the project website if one exists) and link the object:  update public.objekte set neubauprojekt_id = '<projekt uuid>' where id = '<objekt uuid>';
+   Once a week (Mondays) also run 2 to 3 WebSearch queries like "Neubauprojekt Eigentumswohnungen <Gemeinde> 2027" / "Reiheneinfamilienhäuser Neubau <Gemeinde> Vormerkung" for a rotating set of 6 to 8 radar_gemeinden (go through the list over the weeks) and record what you find.
+4. KNOWN PROJECTS: re-check the website of every project in phase 'vormerkung' or 'verkauf' whose zuletzt_geprueft is older than 7 days (select id, name, website, phase, preis_ab from public.neubauprojekte where phase in ('vormerkung','verkauf') and (zuletzt_geprueft is null or zuletzt_geprueft < current_date - 7)); update phase (vormerkung -> verkauf when prices are published, -> ausverkauft when everything is reserved/sold), prices and bezug via neubauprojekt_melden with "id". Projects in phase 'geplant': look again every 30 days (a website or Vermarkter usually appears 6 to 18 months after the Baugesuch).
+5. Log one row:  insert into public.lauf_protokoll (makler, geprueft, anzahl_inserate, neue, geaendert, fehler, beendet_am) values ('Neubau-Radar', true, <projects checked>, <new projects>, <phase/price changes>, null, now());
+6. PUSH: for every NEW project today in phase 'vormerkung' or 'verkauf' (select … from public.neubau_ereignisse where typ = 'erfasst' and datum::date = current_date), and every phase change geplant -> vormerkung/verkauf, call
+     select public.push_senden('Neubau: <Name>, <Gemeinde>', '<Phase> · <Zimmer> Zi · ab CHF <Preis> · Interessentenliste jetzt eintragen', '/radar');
+   Include new projects and phase changes in the PushNotification summary as well. Baugesuche themselves are pushed by the 07:15 job already, do not push them again.

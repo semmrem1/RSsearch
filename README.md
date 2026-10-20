@@ -34,6 +34,17 @@ npm install
 npm run dev
 ```
 
+## Neubau-Radar (`/radar`)
+
+Findet Neubauprojekte ab dem Baugesuch, lange bevor sie auf den Portalen erscheinen.
+
+- Tabellen: `radar_gemeinden` (Gemeinden im Radar, in der App ein- und ausschaltbar), `baugesuche`, `neubauprojekte`, `neubau_ereignisse`; `objekte.neubauprojekt_id` verknüpft Inserate mit einem Projekt
+- Edge Function `baugesuche-abruf`: Amtsblatt ZH (Rubrik BP-ZH) und Amtsblatt SZ (BA-SZ05) über die Amtsblattportal-API auf `www.amtsblatt.zh.ch` (amtsblatt.sz.ch ist aus der Cloud nicht erreichbar), Publikationen SG über `publikationen.sg.ch` (Rubrik «Zur Einsprache offen»). Nur Wohnbau-relevante Gesuche werden gespeichert, Relevanz per `baugesuch_relevanz()`. Privatpersonen werden nie gespeichert (Bauherr/Projektverfasser nur bei Firmen)
+- Täglich 07:15 per pg_cron (`neubau-radar-baugesuche` → `public.baugesuche_abrufen()`), Push bei neuen Wohnbau-Gesuchen
+- RPCs: `neubauprojekt_melden(jsonb)` (anlegen oder aktualisieren, Verlauf in `neubau_ereignisse`), `baugesuch_zuordnen(baugesuch, projekt)`
+- Der tägliche Claude-Lauf (`docs/daily-task-prompt.md`, Abschnitt NEUBAU-RADAR) recherchiert neue Wohnbau-Gesuche, prüft ZKB-Baupromotionen und B2S und aktualisiert bekannte Projekte
+- Grenzen: SZ hält Baugesuche nur während der Auflage online (kein Rückblick), SG liefert pro Gemeinde die letzten 10 Publikationen
+
 ## Deployment (Cloudflare Pages)
 
 1. Cloudflare Dashboard > Workers & Pages > Create > Pages > Connect to Git > Repo `semmrem1/RSsearch`

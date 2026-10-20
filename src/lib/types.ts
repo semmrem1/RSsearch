@@ -215,3 +215,61 @@ export interface LaufProtokoll {
   geaendert: number;
   fehler: string | null;
 }
+
+// ---------- Neubau-Radar ----------
+export type BaugesuchRelevanz = 'hoch' | 'mittel' | 'tief';
+export type BaugesuchStatus = 'neu' | 'gesichtet' | 'beobachten' | 'irrelevant';
+export interface Baugesuch {
+  id: string;
+  quelle: string;
+  externe_id: string;
+  publ_nr: string | null;
+  publiziert_am: string | null;
+  frist_bis: string | null;
+  gemeinde: string | null;
+  kanton: string | null;
+  ortsteil: string | null;
+  adresse: string | null;
+  beschreibung: string | null;
+  bauherr: string | null;
+  projektverfasser: string | null;
+  url: string | null;
+  relevanz: BaugesuchRelevanz;
+  wohnungen: number | null;
+  status: BaugesuchStatus;
+  notiz: string | null;
+  neubauprojekt_id: string | null;
+  erfasst_am: string;
+}
+
+export type NeubauPhase = 'geplant' | 'vormerkung' | 'verkauf' | 'ausverkauft' | 'miete' | 'uninteressant';
+export interface Neubauprojekt {
+  id: string;
+  name: string;
+  gemeinde: string | null;
+  kanton: string | null;
+  adresse: string | null;
+  phase: NeubauPhase;
+  typ: string | null;
+  einheiten: number | null;
+  zimmer_von: number | null;
+  zimmer_bis: number | null;
+  flaeche_von: number | null;
+  flaeche_bis: number | null;
+  preis_ab: number | null;
+  preis_bis: number | null;
+  bezug: string | null;
+  bauherr: string | null;
+  vermarkter: string | null;
+  kontakt: string | null;
+  website: string | null;
+  quelle_url: string | null;
+  bild_url: string | null;
+  interessent_seit: string | null;
+  notiz: string | null;
+  zuletzt_geprueft: string | null;
+  erfasst_am: string;
+  aktualisiert_am: string;
+}
+export interface NeubauEreignis { id: number; neubauprojekt_id: string; datum: string; typ: string; alt: string | null; neu: string | null; user_id: string | null }
+export interface RadarGemeinde { name: string; kanton: string; bfs_nr: number | null; aktiv: boolean; hinweis: string | null }

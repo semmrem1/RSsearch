@@ -54,6 +54,7 @@ export default function Layout() {
             <NavLink to="/pipeline">Pipeline</NavLink>
             <NavLink to="/inserate">Inserate</NavLink>
             <NavLink to="/karte">Karte</NavLink>
+            <NavLink to="/radar">Radar</NavLink>
             <NavLink to="/dokumente">Dokumente</NavLink>
           </nav>
           <div className="header-right">
@@ -90,8 +91,11 @@ export default function Layout() {
         <NavLink to="/karte">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z" /><path d="M9 4v14M15 6v14" /></svg>Karte
         </NavLink>
+        <NavLink to="/radar">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><path d="M12 12l6-6" /></svg>Radar
+        </NavLink>
         <NavLink to="/dokumente">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 2h8l6 6v14H6z" /><path d="M14 2v6h6" /></svg>Dokumente
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 2h8l6 6v14H6z" /><path d="M14 2v6h6" /></svg>Doku
         </NavLink>
       </nav>
     </>

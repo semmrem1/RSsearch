@@ -456,3 +456,45 @@ table.list th:first-child .th-sort { padding-left: 18px; padding-right: 0; }
 .krit-person { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: var(--bg); min-width: 0; }
 .krit-person-kopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .krit-person .textarea, .krit-person .input { background: var(--card); }
+
+/* Neubau-Radar */
+@media (max-width: 720px) {
+  .mobile-tabs { padding-left: 4px; padding-right: 4px; }
+  .mobile-tabs a { min-width: 0; flex: 1 1 0; }
+}
+.radar-gruppe { display: flex; flex-direction: column; gap: 12px; }
+.radar-gruppe-kopf { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.radar-projekte { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.radar-projekt { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.radar-projekt-kopf { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.radar-projekt-name { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.radar-fakten { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 16px; margin: 0; }
+.radar-fakten dt { font-size: 12px; color: var(--ink-4); }
+.radar-fakten dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.radar-projekt-fuss { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.radar-projekt-fuss .radar-aktionen { margin-left: auto; }
+.radar-aktionen { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.radar-phase { width: auto; min-height: 36px; font-size: 13px; }
+.radar-verlauf { display: flex; flex-direction: column; gap: 6px; background: var(--col-bg); border-radius: var(--radius-s); padding: 10px 12px; }
+.radar-verlauf .tnum { margin-right: 6px; }
+.radar-gesuche { display: flex; flex-direction: column; }
+.radar-gesuch { padding: 14px 22px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 4px; }
+.radar-gesuch.neu { box-shadow: inset 3px 0 0 var(--warm); }
+.radar-gesuch-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.radar-gesuch-ort { font-weight: 600; }
+.radar-gesuch-adr { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.radar-gesuch-fuss { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.radar-gemeinden { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 0 28px; }
+.radar-gemeinde { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto 28px; align-items: center; gap: 8px; min-height: 40px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+.radar-gemeinde input { width: 18px; height: 18px; }
+.radar-gemeinde .tnum { text-align: right; }
+@media (max-width: 720px) {
+  .radar-gesuch { padding: 14px 16px; }
+  .radar-projekt { padding: 16px; }
+  .radar-gemeinde { grid-template-columns: 20px minmax(0, 1fr) 28px; }
+  .radar-gemeinde > span:nth-child(3) { display: none; }
+}
+.filter-felder > .radar-suche { flex: 1 1 260px; max-width: 420px; }
+@media (max-width: 720px) { .filter-felder > .radar-suche { grid-column: 1 / -1; max-width: none; } }
+.radar-inserate { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.radar-inserate .xs { flex-basis: 100%; }
