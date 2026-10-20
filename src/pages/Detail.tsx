@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { Avatar } from '../components/Layout';
-import { StarsInput, StarsText } from '../components/Stars';
 import ObjektBild from '../components/ObjektBild';
 import Karte from '../components/KarteLazy';
 import { direktQuelle, quelleDirekt } from '../lib/links';
@@ -15,11 +14,12 @@ import BudgetKarte from '../components/BudgetKarte';
 import { useObjektBudget } from '../hooks/useObjektBudget';
 import { budget, ueberschussFarbe } from '../lib/budget';
 import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
+import AmpelInfo from '../components/AmpelInfo';
 import FinanzierungKarte from '../components/FinanzierungKarte';
 import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import type { ExposeExtrakt, Gemeinde, ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
-import type { Objekt, Quelle, Snapshot, Aktivitaet, Bewertung, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
+import type { Objekt, Quelle, Snapshot, Aktivitaet, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
 
 export default function Detail() {
   const { id } = useParams();
@@ -30,7 +30,6 @@ export default function Detail() {
   const [quellen, setQuellen] = useState<Quelle[]>([]);
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const [akt, setAkt] = useState<Aktivitaet[]>([]);
-  const [bew, setBew] = useState<Bewertung[]>([]);
   const [docs, setDocs] = useState<Dokument[]>([]);
   const [loc, setLoc] = useState<Standortfaktor[]>([]);
   const [missing, setMissing] = useState(false);
@@ -39,13 +38,6 @@ export default function Detail() {
   const [aTyp, setATyp] = useState<AktivitaetTyp>('notiz');
   const [aText, setAText] = useState('');
   const [aFaellig, setAFaellig] = useState('');
-  // eigene Bewertung
-  const [editRating, setEditRating] = useState(false);
-  const [rSterne, setRSterne] = useState(0);
-  const [rFav, setRFav] = useState(false);
-  const [rUnint, setRUnint] = useState(false);
-  const [rKomm, setRKomm] = useState('');
-  const [rTags, setRTags] = useState('');
   const [uploading, setUploading] = useState(false);
   const [extrakte, setExtrakte] = useState<ExposeExtrakt[]>([]);
   const [gemeinde, setGemeinde] = useState<Gemeinde | null>(null);
@@ -59,12 +51,11 @@ export default function Detail() {
 
   const load = useCallback(async () => {
     if (!id) { return; }
-    const [a, b, c, d, e, f, g] = await Promise.all([
+    const [a, b, c, d, f, g] = await Promise.all([
       supabase.from('objekte').select('*').eq('id', id).maybeSingle(),
       supabase.from('objekt_quellen').select('*').eq('objekt_id', id).order('spiegel_von', { nullsFirst: true }).order('erstmals_gesehen'),
       supabase.from('snapshots').select('*').eq('objekt_id', id).order('datum', { ascending: false }),
       supabase.from('aktivitaeten').select('*').eq('objekt_id', id).order('datum', { ascending: false }),
-      supabase.from('bewertungen').select('*').eq('objekt_id', id),
       supabase.from('dokumente').select('*').eq('objekt_id', id).order('created_at', { ascending: false }),
       supabase.from('standortfaktoren').select('*').eq('objekt_id', id).order('id'),
     ]);
@@ -73,7 +64,6 @@ export default function Detail() {
     setQuellen((b.data || []) as Quelle[]);
     setSnaps((c.data || []) as Snapshot[]);
     setAkt((d.data || []) as Aktivitaet[]);
-    setBew((e.data || []) as Bewertung[]);
     setDocs((f.data || []) as Dokument[]);
     setLoc((g.data || []) as Standortfaktor[]);
     const obj = a.data as Objekt;
@@ -115,12 +105,6 @@ export default function Detail() {
     return () => { ab = true; };
   }, [o === null ? null : o.id, o === null ? null : geoSuchtext(o)]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (me === null) { return; }
-    const mine = bew.find((x) => x.user_id === me.id);
-    if (mine) { setRSterne(mine.sterne); setRFav(mine.favorit); setRUnint(mine.uninteressant); setRKomm(mine.kommentar || ''); setRTags(mine.tags.join(', ')); }
-  }, [bew, me]);
-
   if (missing) { return <div className="empty">Objekt nicht gefunden. <Link to="/inserate">Zurück</Link></div>; }
   if (o === null) { return <div className="empty">Lade …</div>; }
 
@@ -156,14 +140,6 @@ export default function Detail() {
 
   async function changeStufe(code: string) {
     await supabase.from('objekte').update({ stufe_code: code }).eq('id', o!.id);
-    load();
-  }
-
-  async function saveRating() {
-    if (me === null) { return; }
-    const tags = rTags.split(',').map((t) => t.trim()).filter((t) => t !== '');
-    await supabase.from('bewertungen').upsert({ objekt_id: o!.id, user_id: me.id, sterne: rSterne, favorit: rFav, uninteressant: rUnint, kommentar: rKomm || null, tags });
-    setEditRating(false);
     load();
   }
 
@@ -271,55 +247,6 @@ export default function Detail() {
         </div>
       ) : null}
 
-      {(() => {
-        const zEff = budgetDaten !== null && budgetDaten.zins_effektiv !== undefined ? Number(budgetDaten.zins_effektiv) : Number(haushalt.zins_effektiv);
-        const t = tragbarkeit(o.preis_chf, haushalt, zEff);
-        const b = budget(o.preis_chf, haushalt, profiles, budgetPosten, budgetDaten);
-        const amp = ue !== null ? ampel(ue, haushalt, profiles, budgetPosten) : null;
-        const pz = ue !== null ? ue.pendelzeiten : {};
-        const kpi = (k: string, v: ReactNode, sub?: ReactNode, farbe?: string) => (
-          <div key={k} className="kpi ek">
-            <span className="xs muted">{k}</span>
-            <span className="tnum ek-wert" style={farbe ? { color: farbe } : undefined}>{v}</span>
-            {sub !== undefined ? <span className="xs muted ek-sub">{sub}</span> : null}
-          </div>
-        );
-        return (
-          <section className="ek-strip" aria-label="Entscheid auf einen Blick">
-            {amp !== null ? (
-              <div className="kpi ek ek-ampel" style={{ borderColor: AMPEL_FARBE[amp.stufe] }} title={amp.gruende.join(' · ')}>
-                <span className="xs muted">Einschätzung</span>
-                <span className="ek-wert" style={{ color: AMPEL_FARBE[amp.stufe] }}><span className="ampel-dot" style={{ background: AMPEL_FARBE[amp.stufe] }} />{AMPEL_LABEL[amp.stufe]}</span>
-                <span className="xs muted ek-sub">{amp.gruende.slice(0, 2).join(' · ')}</span>
-              </div>
-            ) : null}
-            {kpi('Preis', chf(o.preis_chf, true), o.preis_chf !== null && o.flaeche_m2 ? 'CHF ' + chf(o.preis_chf / o.flaeche_m2) + '/m²' + (lastPriceChange ? ' · geändert ' + dateShort(lastPriceChange.datum) : '') : (lastPriceChange ? 'geändert ' + dateShort(lastPriceChange.datum) : 'unverändert'))}
-            {kpi('Objekt', (o.zimmer !== null ? o.zimmer + ' Zi' : '–') + ' · ' + (o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : '–'), typLabel(o.typ) + (o.baujahr !== null ? ' · Baujahr ' + o.baujahr : '') + (o.grundstueck_m2 !== null ? ' · ' + o.grundstueck_m2 + ' m² Land' : ''))}
-            {kpi('Am Markt', (ue !== null ? ue.tage_am_markt : 0) + ' Tage', 'seit ' + dateShort(o.erstmals_gesehen) + ' · zuletzt ' + dateShort(o.zuletzt_gesehen), ue !== null && ue.tage_am_markt > 90 ? 'var(--warm-dark)' : undefined)}
-            {kpi('Tragbarkeit Bank', t !== null && (t.bank.quote !== null || t.ekZuTief) ? (t.ekZuTief ? 'EK zu tief' : quoteText(t.bank)) : '–', 'kalk. ' + haushalt.zins_kalk + ' % · max. ' + haushalt.tragbarkeit_max + ' %', t !== null ? stufeFarbe(t.bank.stufe) : undefined)}
-            {kpi('Belastung pro Monat', t !== null && haushalt.eigenkapital !== null ? 'CHF ' + chf(t.effektiv.kosten / 12) : '–', 'Zins ' + zEff + ' % effektiv · Hypothek ' + (t !== null ? chf(t.hypothek) : '–'))}
-            {kpi('Budget', b.vollstaendig ? (b.ueberschuss < 0 ? '−' : '+') + 'CHF ' + chf(Math.abs(b.ueberschuss)) + '/Mt' : '–', b.vollstaendig && b.sparquote !== null ? (b.sparquote * 100).toFixed(0) + ' % Sparquote' : 'Nettolohn in Einstellungen', b.vollstaendig ? ueberschussFarbe(b) : undefined)}
-            {kpi('Pendeln ÖV', profiles.map((p) => p.kuerzel + ' ' + (pz[p.id] ? pz[p.id].minuten + "'" : '–')).join(' · '), profiles.map((p) => (pz[p.id] && pz[p.id].nach ? p.kuerzel + ' → ' + pz[p.id].nach : null)).filter((x) => x !== null).join(' · ') || 'Arbeitsort in Einstellungen')}
-            {kpi('Score', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · '))}
-            {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') : o.ort)}
-          </section>
-        );
-      })()}
-
-      <div className="entscheid-grid">
-        <section className="card pad" aria-labelledby="fin-h">
-          <FinanzierungKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} />
-        </section>
-        <section className="card pad" aria-labelledby="budget-h">
-          <div className="card-head"><h2 id="budget-h">Budget pro Monat</h2><span className="xs muted">Einkommen nach Pensum, Wohnkosten, Ausgaben</span></div>
-          <BudgetKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} />
-        </section>
-        <section className="card pad" aria-labelledby="krit-h">
-          <div className="card-head"><h2 id="krit-h">Kriterien</h2><span className="xs muted">1 schlecht · 5 sehr gut</span></div>
-          <KriterienGrid objektId={o.id} onChange={() => load()} />
-        </section>
-      </div>
-
       <section className="card" aria-labelledby="lage-h">
         <h2 id="lage-h" className="sr-only">Bild und Lage</h2>
         <div className="lage-grid">
@@ -339,6 +266,55 @@ export default function Detail() {
         </div>
         <Galerie objektId={o.id} version={galerieVersion} />
       </section>
+
+      {(() => {
+        const zEff = budgetDaten !== null && budgetDaten.zins_effektiv !== undefined ? Number(budgetDaten.zins_effektiv) : Number(haushalt.zins_effektiv);
+        const t = tragbarkeit(o.preis_chf, haushalt, zEff);
+        const b = budget(o.preis_chf, haushalt, profiles, budgetPosten, budgetDaten);
+        const amp = ue !== null ? ampel(ue, haushalt, profiles, budgetPosten, budgetDaten) : null;
+        const pz = ue !== null ? ue.pendelzeiten : {};
+        const kpi = (k: string, v: ReactNode, sub?: ReactNode, farbe?: string) => (
+          <div key={k} className="kpi ek">
+            <span className="xs muted">{k}</span>
+            <span className="tnum ek-wert" style={farbe ? { color: farbe } : undefined}>{v}</span>
+            {sub !== undefined ? <span className="xs muted ek-sub">{sub}</span> : null}
+          </div>
+        );
+        return (
+          <section className="ek-strip" aria-label="Entscheid auf einen Blick">
+            {amp !== null ? (
+              <AmpelInfo ampel={amp} className="kpi ek ek-ampel" style={{ borderColor: AMPEL_FARBE[amp.stufe], cursor: 'help' }}>
+                <span className="xs muted">Einschätzung</span>
+                <span className="ek-wert" style={{ color: AMPEL_FARBE[amp.stufe] }}><span className="ampel-dot" style={{ background: AMPEL_FARBE[amp.stufe] }} />{AMPEL_LABEL[amp.stufe]}</span>
+                <span className="xs muted ek-sub">{amp.stufe === 'gruen' || amp.stufe === 'grau' ? amp.gruende[0] : amp.pruefungen.filter((x) => x.stufe === 'rot' || x.stufe === 'gelb').map((x) => x.name).join(' · ')} · Details beim Überfahren</span>
+              </AmpelInfo>
+            ) : null}
+            {kpi('Preis', chf(o.preis_chf, true), o.preis_chf !== null && o.flaeche_m2 ? 'CHF ' + chf(o.preis_chf / o.flaeche_m2) + '/m²' + (lastPriceChange ? ' · geändert ' + dateShort(lastPriceChange.datum) : '') : (lastPriceChange ? 'geändert ' + dateShort(lastPriceChange.datum) : 'unverändert'))}
+            {kpi('Objekt', (o.zimmer !== null ? o.zimmer + ' Zi' : '–') + ' · ' + (o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : '–'), typLabel(o.typ) + (o.baujahr !== null ? ' · Baujahr ' + o.baujahr : '') + (o.grundstueck_m2 !== null ? ' · ' + o.grundstueck_m2 + ' m² Land' : ''))}
+            {kpi('Am Markt', (ue !== null ? ue.tage_am_markt : 0) + ' Tage', 'seit ' + dateShort(o.erstmals_gesehen) + ' · zuletzt ' + dateShort(o.zuletzt_gesehen), ue !== null && ue.tage_am_markt > 90 ? 'var(--warm-dark)' : undefined)}
+            {kpi('Tragbarkeit Bank', t !== null && (t.bank.quote !== null || t.ekZuTief) ? (t.ekZuTief ? 'EK zu tief' : quoteText(t.bank)) : '–', 'kalk. ' + haushalt.zins_kalk + ' % · max. ' + haushalt.tragbarkeit_max + ' %', t !== null ? stufeFarbe(t.bank.stufe) : undefined)}
+            {kpi('Belastung pro Monat', t !== null && haushalt.eigenkapital !== null ? 'CHF ' + chf(t.effektiv.kosten / 12) : '–', 'Zins ' + zEff + ' % effektiv · Hypothek ' + (t !== null ? chf(t.hypothek) : '–'))}
+            {kpi('Budget', b.vollstaendig ? (b.ueberschuss < 0 ? '−' : '+') + 'CHF ' + chf(Math.abs(b.ueberschuss)) + '/Mt' : '–', b.vollstaendig && b.sparquote !== null ? (b.sparquote * 100).toFixed(0) + ' % Sparquote' : 'Nettolohn in Einstellungen', b.vollstaendig ? ueberschussFarbe(b) : undefined)}
+            {kpi('Pendeln ÖV', profiles.map((p) => p.kuerzel + ' ' + (pz[p.id] ? pz[p.id].minuten + "'" : '–')).join(' · '), profiles.map((p) => (pz[p.id] && pz[p.id].nach ? p.kuerzel + ' → ' + pz[p.id].nach : null)).filter((x) => x !== null).join(' · ') || 'Arbeitsort in Einstellungen')}
+            {kpi('Score', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · '))}
+            {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') : o.ort)}
+          </section>
+        );
+      })()}
+
+      <div className="entscheid-grid">
+        <section className="card pad" aria-labelledby="fin-h">
+          <FinanzierungKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} gemeinde={gemeinde} ort={o.ort} />
+        </section>
+        <section className="card pad" aria-labelledby="budget-h">
+          <div className="card-head"><h2 id="budget-h">Budget pro Monat</h2><span className="xs muted">Einkommen nach Pensum, Wohnkosten, Ausgaben</span></div>
+          <BudgetKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} gemeinde={gemeinde} />
+        </section>
+        <section className="card pad" aria-labelledby="krit-h">
+          <div className="card-head"><h2 id="krit-h">Kriterien &amp; Bewertung</h2><span className="xs muted">1 schlecht · 5 sehr gut · pro Person</span></div>
+          <KriterienGrid objektId={o.id} onChange={() => load()} />
+        </section>
+      </div>
 
       <div className="two-col">
         <div className="main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -414,59 +390,6 @@ export default function Detail() {
         </div>
 
         <aside className="side">
-          <section className="card pad" aria-labelledby="rate-h">
-            <h2 id="rate-h">Bewertung pro Person</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-              {profiles.map((p) => {
-                const b = bew.find((x) => x.user_id === p.id);
-                return (
-                  <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: 10, background: 'var(--bg)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, color: p.farbe }}>{p.name}</span>
-                      <StarsText n={b ? b.sterne : 0} color={p.farbe} />
-                    </div>
-                    {b && b.kommentar ? <span className="small" style={{ color: 'var(--ink-2)' }}>{b.kommentar}</span> : <span className="small muted">Noch keine Bewertung</span>}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {b && b.favorit ? <span className="chip outline">Favorit</span> : null}
-                      {b && b.uninteressant ? <span className="chip outline">Uninteressant</span> : null}
-                      {b ? b.tags.map((t) => <span key={t} className="chip outline">{t}</span>) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {me !== null && !editRating ? <button type="button" className="btn" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }} onClick={() => setEditRating(true)}>Meine Bewertung bearbeiten</button> : null}
-            {me !== null && editRating ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-                <StarsInput value={rSterne} onChange={setRSterne} color={me.farbe} />
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={rFav} onChange={(e) => setRFav(e.target.checked)} /> Favorit</label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={rUnint} onChange={(e) => setRUnint(e.target.checked)} /> Uninteressant</label>
-                <label htmlFor="r-komm" className="sr-only">Kommentar</label>
-                <textarea id="r-komm" className="textarea" rows={3} placeholder="Kommentar" value={rKomm} onChange={(e) => setRKomm(e.target.value)} />
-                <label htmlFor="r-tags" className="sr-only">Tags</label>
-                <input id="r-tags" className="input" placeholder="Tags, mit Komma getrennt" value={rTags} onChange={(e) => setRTags(e.target.value)} />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="btn" onClick={() => setEditRating(false)}>Abbrechen</button>
-                  <button type="button" className="btn primary" onClick={saveRating}>Speichern</button>
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="card pad" aria-labelledby="gem-h">
-            <h2 id="gem-h">Gemeinde &amp; Steuern</h2>
-            {gemeinde === null ? <div className="small muted" style={{ marginTop: 8 }}>Keine Gemeindedaten für «{o.ort}». Unter Einstellungen pflegen.</div> : (
-              <div className="xs tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', marginTop: 10 }}>
-                <span className="muted">Gemeinde</span><span style={{ textAlign: 'right', fontWeight: 600 }}>{gemeinde.name} {gemeinde.kanton}</span>
-                <span className="muted">Steuerfuss {gemeinde.steuerfuss_jahr || ''}</span><span style={{ textAlign: 'right', fontWeight: 600 }}>{gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–'}</span>
-                {gemeinde.steuerfuss_hinweis ? <><span /><span style={{ textAlign: 'right' }} className="muted">{gemeinde.steuerfuss_hinweis}</span></> : null}
-                {gemeinde.steuer_index !== null ? <><span className="muted">Index</span><span style={{ textAlign: 'right' }}>{gemeinde.steuer_index}</span></> : null}
-                <span className="muted">Quelle</span><span style={{ textAlign: 'right' }}>{gemeinde.quelle_url ? <a href={gemeinde.quelle_url} target="_blank" rel="noopener noreferrer">öffnen ↗</a> : '–'}</span>
-              </div>
-            )}
-            <span className="xs muted" style={{ display: 'block', marginTop: 8 }}>Steuerfüsse sind nur innerhalb eines Kantons vergleichbar.</span>
-          </section>
-
           <section className="card pad" aria-labelledby="src-h">
             <h2 id="src-h">Quellen &amp; Makler</h2>
             <div className="rows" style={{ marginTop: 8 }}>

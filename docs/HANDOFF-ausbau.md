@@ -1,6 +1,6 @@
 # Übergabe: Ausbau RSsearch (Stand 20.10.2026, 08:10)
 
-Alle Verbesserungsvorschläge, die Budgetrechnung und der «Entscheid auf einen Blick» sind umgesetzt und auf `main` gemergt (Cloudflare deployt automatisch). Branch `ausbau` ist identisch mit `main`. Letzter Commit: `4a93441`.
+Alle Verbesserungsvorschläge, die Budgetrechnung und der «Entscheid auf einen Blick» sind umgesetzt und auf `main` gemergt (Cloudflare deployt automatisch). Branch `ausbau` ist identisch mit `main`. Letzter Commit: siehe `git log`.
 
 ## Umgesetzt
 - Tragbarkeit pro Objekt (Haushalt unter Einstellungen), Tage am Markt, Kriterienkatalog mit Score, «Uneinig»-Abschnitt und Filter
@@ -16,6 +16,10 @@ Alle Verbesserungsvorschläge, die Budgetrechnung und der «Entscheid auf einen 
 - Entscheid auf einen Blick (20.10.): KPI-Leiste (10 Kacheln, 5 pro Zeile ab 1000 px, 10 ab 1900 px) und dreispaltiges Raster Finanzierung / Budget / Kriterien; `main` bis 1800 px breit; Gemeinde & Steuern als Karte in der Seitenspalte
 - Ampel `src/lib/ampel.ts` (Passt / Prüfen / Eher nicht / Offen) als erste Tabellenspalte, Filter «Einschätzung», Chip in den Mobile-Karten
 - Tabelle schlanker (Kürzel-Avatare als Spaltenköpfe, Spalte «Erfasst» erst ab 1540 px), passt ohne Scrollen auf 1366 px
+- Ampel-Auswertung (20.10., 2. Runde): `ampel()` liefert `pruefungen[]` (Markt, Eigenkapital, Tragbarkeit, Budget, Score, Einigkeit, Markierung mit Stufe ok/gelb/rot/offen und Text); `AmpelInfo` zeigt sie als Popover (Hover, Fokus, Tap; Portal in body, damit die Tabelle nichts abschneidet)
+- Inseratsseite neu geordnet: Bild + Karte, KPI-Leiste, Finanzierung / Budget / Kriterien, dann Verlauf, Aktivitäten, Quellen, Dokumente, Standortfaktoren
+- «Bewertung pro Person» ersetzt durch «Kriterien & Bewertung»: Gefühl-Sterne (`bewertungen.sterne`), Notiz, Tags, Favorit, Uninteressant pro Person in `KriterienGrid`
+- Gemeinde & Steuern in Finanzierung (Tabelle) und Budget (Hinweis beim Posten mit «Steuer» im Namen); Steuerfuss in der Übersicht unter dem Objekt (Desktop und Mobile)
 
 ## Noch zu tun (nächste Session)
 1. Live-Test nach Deploy: Inserat öffnen, Zins effektiv ändern (speichert mit 400 ms Verzögerung), Pensum ändern, Ampel in der Übersicht prüfen

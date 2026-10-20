@@ -19,7 +19,10 @@ Immobilien-Tracker für die Eigenheimsuche von Remo und Pascale. React + Vite + 
 - Budgetrechnung pro Inserat: Nettolohn und Pensum pro Person, weitere Einkünfte, effektiver Hypozins und Standard-Ausgaben (`budget_posten`) unter Einstellungen; auf der Inseratsseite Einkommen minus Wohnkosten des Objekts minus Ausgaben, pro Objekt überschreibbar (`objekt_budget.daten`), Spalte «Budget» in der Tabelle
 - Finanzierung pro Inserat: Bank-Sicht (kalk. Zins, entscheidet über Tragbarkeit) neben Effektiv-Sicht (realer Zins, Standard unter Einstellungen › Budget, pro Inserat in der Karte «Finanzierung» überschreibbar, `objekt_budget.daten.zins_effektiv`); «Beim Kauf» mit Eigenkapital (mind. 20 %), Kaufnebenkosten (`haushalt.kaufnebenkosten_pct`) und Mittelbedarf
 - Entscheid auf einen Blick: KPI-Leiste oben auf dem Inserat (Einschätzung, Preis, Objekt, Tage am Markt, Tragbarkeit Bank, Belastung pro Monat, Budget, Pendeln, Score, Steuerfuss) und dreispaltiges Raster Finanzierung / Budget / Kriterien; Layout bis 1800 px breit
-- Ampel (`src/lib/ampel.ts`): grün «Passt», gelb «Prüfen», rot «Eher nicht», grau «Offen», abgeleitet aus Tragbarkeit, Budget-Überschuss, Score, Uneinigkeit, Marktstatus und «uninteressant»; erste Spalte der Tabelle (sortierbar), Filter «Einschätzung»
+- Ampel (`src/lib/ampel.ts`): grün «Passt», gelb «Prüfen», rot «Eher nicht», grau «Offen» aus sieben Prüfungen (Markt, Eigenkapital, Tragbarkeit, Budget, Score, Einigkeit, Markierung); erste Spalte der Tabelle (sortierbar), Filter «Einschätzung»; Auswertung aller Prüfungen als Popover beim Überfahren oder Antippen (`AmpelInfo`), in Übersicht und Inserat
+- Inseratsseite von oben nach unten: Bild und Karte, KPI-Leiste mit Ampel, Finanzierung / Budget / Kriterien, dann Preisverlauf, Aktivitäten, Quellen, Dokumente, Standortfaktoren
+- Kriterien & Bewertung in einer Karte: Kriterien 1 bis 5 pro Person, Score, «Gefühl» (Sterne, `bewertungen.sterne`), Notiz und Tags pro Person (automatisch beim Tippen gespeichert), Favorit / Uninteressant
+- Gemeinde & Steuern in der Karte «Finanzierung» (Steuerfuss, Index, Beispiel, Quelle) und beim Posten «Steuern» im Budget; Steuerfuss in der Übersicht unter dem Objekt
 - Direktlink zum Inserat ist Pflicht: `objekt_quellen.url_direkt` erkennt Übersichtsseiten, `upsert_inserat` lehnt sie ab
 
 ## Lokal starten

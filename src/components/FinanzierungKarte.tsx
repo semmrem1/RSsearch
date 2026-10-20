@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import { chf } from '../lib/format';
-import type { ObjektBudgetDaten } from '../lib/types';
+import type { Gemeinde, ObjektBudgetDaten } from '../lib/types';
 
 /** Finanzierung: Bank-Sicht (kalk. Zins) neben der effektiven Belastung (realer Zins, pro Objekt anpassbar) und Mittelbedarf beim Kauf. */
-export default function FinanzierungKarte({ preis, daten, speichern }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void }) {
+export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, ort }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void; gemeinde: Gemeinde | null; ort: string }) {
   const { haushalt } = useApp();
   const zinsOverride = daten !== null && daten.zins_effektiv !== undefined ? Number(daten.zins_effektiv) : null;
   const zinsEff = zinsOverride !== null ? zinsOverride : Number(haushalt.zins_effektiv);
@@ -68,6 +68,21 @@ export default function FinanzierungKarte({ preis, daten, speichern }: { preis: 
           </table>
           {t.ekZuTief ? <div className="notice" style={{ marginTop: 8 }}>Belehnung über {haushalt.belehnung_max} %: Es fehlen CHF {chf(t.ekMindest - t.ekEingesetzt)} Eigenkapital.</div> : null}
         </>
+      )}
+
+      <h3 className="small" style={{ marginTop: 14, fontWeight: 600 }}>Gemeinde &amp; Steuern</h3>
+      {gemeinde === null ? (
+        <div className="xs muted" style={{ marginTop: 6 }}>Keine Gemeindedaten für «{ort}». Unter <Link to="/einstellungen">Einstellungen › Gemeinden</Link> erfassen.</div>
+      ) : (
+        <table className="fin-tabelle">
+          <tbody>
+            <tr><td>Gemeinde</td><td className="r">{gemeinde.name} {gemeinde.kanton}</td></tr>
+            <tr><td>Steuerfuss{gemeinde.steuerfuss_jahr ? <span className="xs muted"> {gemeinde.steuerfuss_jahr}</span> : null}{gemeinde.steuerfuss_hinweis ? <span className="xs muted"> · {gemeinde.steuerfuss_hinweis}</span> : null}</td><td className="r" style={{ fontWeight: 700 }}>{gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–'}</td></tr>
+            {gemeinde.steuer_index !== null ? <tr><td>Steuerbelastungsindex{gemeinde.steuer_index_hinweis ? <span className="xs muted"> · {gemeinde.steuer_index_hinweis}</span> : null}</td><td className="r">{gemeinde.steuer_index}</td></tr> : null}
+            {gemeinde.steuer_beispiel_chf !== null ? <tr><td>Steuern Beispiel{gemeinde.steuer_beispiel_hinweis ? <span className="xs muted"> · {gemeinde.steuer_beispiel_hinweis}</span> : null}</td><td className="r">CHF {chf(gemeinde.steuer_beispiel_chf)}</td></tr> : null}
+            <tr><td className="xs muted">Nur innerhalb eines Kantons vergleichbar</td><td className="r">{gemeinde.quelle_url ? <a className="xs" href={gemeinde.quelle_url} target="_blank" rel="noopener noreferrer">Quelle ↗</a> : null}</td></tr>
+          </tbody>
+        </table>
       )}
     </>
   );

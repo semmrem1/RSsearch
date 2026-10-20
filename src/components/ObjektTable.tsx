@@ -10,6 +10,7 @@ import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import type { BudgetPosten, Haushalt, Profile } from '../lib/types';
 import { budget, ueberschussFarbe } from '../lib/budget';
 import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
+import AmpelInfo from './AmpelInfo';
 
 type Richtung = 'asc' | 'desc';
 interface Sortierung { key: string; dir: Richtung }
@@ -133,7 +134,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
     const pz = meinePendel(r);
     return (
       <>
-        {(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <span className="chip neutral" style={{ color: AMPEL_FARBE[a.stufe], fontWeight: 700 }} title={a.gruende.join(' · ')}><span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe] }} />{AMPEL_LABEL[a.stufe]}</span>; })()}
+        {(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <AmpelInfo ampel={a} className="chip neutral" style={{ color: AMPEL_FARBE[a.stufe], fontWeight: 700 }}><span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe] }} />{AMPEL_LABEL[a.stufe]}</AmpelInfo>; })()}
         {neuFuerMich(r) ? <span className="chip accent">💬 neu für dich</span> : null}
         <span className={'chip ' + (r.tage_am_markt > 90 ? 'warm' : 'neutral')} title="Tage am Markt">{r.tage_am_markt} Tage</span>
         {t !== null && t.quote !== null ? <span className="chip neutral" style={{ color: stufeFarbe(t.stufe), fontWeight: 700 }} title="Tragbarkeit">{t.ekZuTief ? 'EK zu tief' : 'Tragbarkeit ' + quoteText(t)}</span> : null}
@@ -177,6 +178,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                   <span className="obj-karte-titel">{r.ort}{r.titel ? ' · ' + r.titel : ''}</span>
                   {r.adresse ? <span className="xs muted">{r.adresse}</span> : null}
                   <span className="small tnum">{[r.zimmer !== null ? r.zimmer + ' Zi' : null, r.flaeche_m2 !== null ? r.flaeche_m2 + ' m²' : null, typLabel(r.typ)].filter((x) => x !== null).join(' · ')}</span>
+                  {r.steuerfuss !== null ? <span className="xs muted tnum">{(r.gemeinde !== null && r.gemeinde !== r.ort ? r.gemeinde + ' · ' : '') + 'Steuerfuss ' + r.steuerfuss + ' %'}</span> : null}
                   <span className="tnum" style={{ fontWeight: 700 }}>{chf(r.preis_chf, true)}</span>
                   {preisDiff(r)}
                 </div>
@@ -210,15 +212,17 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
             {sortiert.map((r) => {
               const phase = r.stufe_phase === 9 ? 0 : r.stufe_phase;
               const sub = [typLabel(r.typ), r.adresse].filter((x) => x !== null && x !== '').join(' · ');
+              const steuer = r.steuerfuss !== null ? (r.gemeinde !== null && r.gemeinde !== r.ort ? r.gemeinde + ' · ' : '') + 'Steuerfuss ' + r.steuerfuss + ' %' : null;
               return (
                 <tr key={r.id} className={r.stufe_phase === 9 ? 'aus' : undefined}>
-                  <td className="ampel-zelle">{(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe], marginRight: 0 }} title={AMPEL_LABEL[a.stufe] + ': ' + a.gruende.join(' · ')} aria-label={AMPEL_LABEL[a.stufe]} />; })()}</td>
+                  <td className="ampel-zelle">{(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <AmpelInfo ampel={a} className="ampel-trigger"><span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe], marginRight: 0 }} /></AmpelInfo>; })()}</td>
                   <td>
                     <Link to={'/inserate/' + r.id} className="obj" style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                       <ObjektBild o={r} className="thumb" />
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                         <span style={{ fontWeight: 600 }}>{r.ort}{r.titel ? ' · ' + r.titel : ''}</span>
                         <span className="muted small">{sub}</span>
+                        {steuer !== null ? <span className="xs muted tnum" title={'Steuerfuss ' + (r.gemeinde !== null ? r.gemeinde : r.ort) + (r.steuerfuss_jahr !== null ? ' ' + r.steuerfuss_jahr : '')}>{steuer}</span> : null}
                       </span>
                     </Link>
                   </td>

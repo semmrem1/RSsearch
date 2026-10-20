@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
 import { budget, ueberschussFarbe } from '../lib/budget';
 import { chf } from '../lib/format';
-import type { ObjektBudgetDaten } from '../lib/types';
+import type { Gemeinde, ObjektBudgetDaten } from '../lib/types';
 
 function Betrag({ wert, onChange, breit, aria }: { wert: number; onChange: (v: number) => void; breit?: boolean; aria: string }) {
   const [text, setText] = useState(String(wert));
@@ -20,7 +20,7 @@ function Betrag({ wert, onChange, breit, aria }: { wert: number; onChange: (v: n
 }
 
 /** Monatsbudget pro Objekt: Standardwerte aus den Einstellungen, Überschreibungen in objekt_budget. */
-export default function BudgetKarte({ preis, daten, speichern }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void }) {
+export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void; gemeinde: Gemeinde | null }) {
   const { haushalt, profiles, budgetPosten } = useApp();
   const [extraName, setExtraName] = useState('');
   const [extraBetrag, setExtraBetrag] = useState('');
@@ -29,6 +29,8 @@ export default function BudgetKarte({ preis, daten, speichern }: { preis: number
   const b = budget(preis, haushalt, profiles, budgetPosten, daten);
   const ov = daten;
   const istStandard = Object.keys(ov).length === 0;
+  const steuerText = gemeinde !== null && gemeinde.steuerfuss !== null ? 'Steuerfuss ' + gemeinde.name + ' ' + gemeinde.steuerfuss + ' %' + (gemeinde.steuerfuss_jahr ? ' (' + gemeinde.steuerfuss_jahr + ')' : '') : null;
+  const steuerPosten = b.ausgaben.some((z) => /steuer/i.test(z.name));
 
   const setPensum = (userId: string, v: number) => {
     const pensum = { ...(ov.pensum || {}) };
@@ -93,7 +95,7 @@ export default function BudgetKarte({ preis, daten, speichern }: { preis: number
         <div className="budget-kopf"><span>Ausgaben</span><span className="tnum">− CHF {chf(b.ausgabenTotal)}</span></div>
         {b.ausgaben.map((z, i) => (
           <div key={z.id} className="budget-zeile">
-            <span>{z.name}{z.ueberschrieben && z.id.indexOf('extra-') !== 0 ? <span className="xs muted"> · Standard {chf(z.standard)}</span> : null}</span>
+            <span>{z.name}{z.ueberschrieben && z.id.indexOf('extra-') !== 0 ? <span className="xs muted"> · Standard {chf(z.standard)}</span> : null}{steuerText !== null && /steuer/i.test(z.name) ? <span className="xs muted"> · {steuerText}, Betrag für diese Gemeinde hier anpassen</span> : null}</span>
             <span className="budget-pensum">
               {z.id.indexOf('extra-') === 0
                 ? <button type="button" className="linkbtn xs" onClick={() => setExtra(Number(z.id.slice(6)), null)} title="Entfernen">✕</button>
@@ -102,6 +104,7 @@ export default function BudgetKarte({ preis, daten, speichern }: { preis: number
             <Betrag wert={z.betrag} breit aria={z.name} onChange={(v) => (z.id.indexOf('extra-') === 0 ? setExtra(i - budgetPosten.length, v) : setPosten(z.id, v))} />
           </div>
         ))}
+        {!steuerPosten && steuerText !== null ? <div className="budget-zeile"><span className="xs muted">{steuerText}. Posten «Steuern» unter Einstellungen › Budget erfassen, dann lässt er sich hier pro Gemeinde anpassen.</span><span /><span /></div> : null}
         <div className="budget-zeile budget-neu">
           <input className="input" placeholder="Weiterer Posten für dieses Objekt" aria-label="Posten" value={extraName} onChange={(e) => setExtraName(e.target.value)} />
           <span />

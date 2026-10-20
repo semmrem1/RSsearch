@@ -437,3 +437,22 @@ mark.erwaehnung { background: var(--accent-soft); color: var(--accent-dark); bor
 
 table.list td.ampel-zelle { width: 28px; padding-right: 0; }
 table.list th:first-child .th-sort { padding-left: 18px; padding-right: 0; }
+
+/* Ampel-Auswertung (Popover beim Überfahren oder Antippen) */
+.ampel-trigger { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; cursor: help; }
+.ampel-trigger:hover, .ampel-trigger:focus-visible { background: var(--bg); outline: none; }
+.ampel-pop { position: fixed; z-index: 60; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(20, 30, 40, 0.18); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ampel-pop-kopf { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+.ampel-pop-liste { display: flex; flex-direction: column; gap: 6px; }
+.ampel-pop-zeile { display: grid; grid-template-columns: 12px 100px 1fr; gap: 8px; align-items: start; }
+.ampel-pop-zeile .ampel-dot { margin-right: 0; width: 10px; height: 10px; }
+.ampel-pop-name { font-weight: 600; display: flex; flex-direction: column; gap: 1px; line-height: 1.3; }
+.ampel-pop-text { color: var(--ink-2); line-height: 1.35; }
+.ampel-pop-fuss { padding-top: 6px; border-top: 1px solid var(--line-soft); }
+.kpi.ek-ampel:hover, .kpi.ek-ampel:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+
+/* Kriterien: Notiz, Tags und Markierungen pro Person */
+.krit-personen { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.krit-person { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: var(--bg); min-width: 0; }
+.krit-person-kopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.krit-person .textarea, .krit-person .input { background: var(--card); }
