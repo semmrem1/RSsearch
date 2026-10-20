@@ -240,7 +240,18 @@ export interface Baugesuch {
   notiz: string | null;
   neubauprojekt_id: string | null;
   erfasst_am: string;
+  kategorie: BaugesuchKategorie | null;
+  bauherr_typ: BauherrTyp | null;
+  vermarktung: BaugesuchVermarktung | null;
+  einstufung: BaugesuchEinstufung | null;
+  begruendung: string | null;
+  klassifiziert_von: 'regel' | 'claude' | 'manuell' | null;
+  klassifiziert_am: string | null;
 }
+export type BaugesuchKategorie = 'mfh' | 'reihen' | 'mehrere_efh' | 'efh' | 'ueberbauung' | 'umbau' | 'nebenbau' | 'nicht_wohnen';
+export type BauherrTyp = 'entwickler' | 'architekt' | 'privat' | 'oeffentlich' | 'gemeinnuetzig' | 'firma' | 'unbekannt';
+export type BaugesuchVermarktung = 'verkauf' | 'offen' | 'miete' | 'eigenbedarf';
+export type BaugesuchEinstufung = 'fokus' | 'pruefen' | 'irrelevant';
 
 export type NeubauPhase = 'geplant' | 'vormerkung' | 'verkauf' | 'ausverkauft' | 'miete' | 'uninteressant';
 export interface Neubauprojekt {

@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { chf, dateLong, dateShort } from '../lib/format';
-import type { Baugesuch, BaugesuchStatus, NeubauEreignis, NeubauPhase, Neubauprojekt, RadarGemeinde } from '../lib/types';
+import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauEreignis, NeubauPhase, Neubauprojekt, RadarGemeinde } from '../lib/types';
 
 type Tab = 'projekte' | 'baugesuche' | 'gemeinden';
-type RelFilter = 'hoch' | 'mittel' | 'alle';
+type EinFilter = 'relevant' | 'fokus' | 'pruefen' | 'ausgeblendet';
 type StatusFilter = 'offen' | 'beobachten' | 'alle';
 
 const BUDGET = 2500000;
@@ -29,7 +29,23 @@ function phaseChip(p: NeubauPhase): string {
   if (p === 'geplant') { return 'chip outline'; }
   return 'chip neutral';
 }
-function relChip(r: string): string { return r === 'hoch' ? 'chip warm' : r === 'mittel' ? 'chip accent' : 'chip neutral'; }
+// ---------- Einstufung der Baugesuche ----------
+const EINSTUFUNG: Record<BaugesuchEinstufung, { name: string; chip: string; hinweis: string }> = {
+  fokus: { name: 'Fokus', chip: 'chip green', hinweis: 'Neubau mit Wohnraum, Verkauf sehr wahrscheinlich' },
+  pruefen: { name: 'Prüfen', chip: 'chip accent', hinweis: 'Neubau mit Wohnraum, Verkauf möglich aber unklar' },
+  irrelevant: { name: 'Ausgeblendet', chip: 'chip neutral', hinweis: 'Umbau, Nebenbau, Eigenbedarf, Miete oder kein Wohnbau' },
+};
+const KATEGORIE: Record<BaugesuchKategorie, string> = {
+  mfh: 'Mehrfamilienhaus', reihen: 'Reihen-/Doppelhäuser', mehrere_efh: 'Mehrere EFH/ZFH', efh: 'Einfamilienhaus', ueberbauung: 'Überbauung',
+  umbau: 'Umbau/Sanierung', nebenbau: 'Nebenbau/Technik', nicht_wohnen: 'Kein Wohnbau',
+};
+const BAUHERR: Record<BauherrTyp, string> = {
+  entwickler: 'Entwickler/Baufirma', architekt: 'Architekturbüro', privat: 'Privatperson', oeffentlich: 'Öffentliche Hand',
+  gemeinnuetzig: 'Genossenschaft/Stiftung/PK', firma: 'Andere Firma', unbekannt: 'Bauherr unbekannt',
+};
+const VERMARKTUNG: Record<BaugesuchVermarktung, string> = { verkauf: 'Verkauf wahrscheinlich', offen: 'Vermarktung offen', miete: 'Miete', eigenbedarf: 'Eigenbedarf' };
+function einstufungVon(b: Baugesuch): BaugesuchEinstufung { return b.einstufung !== null ? b.einstufung : b.relevanz === 'hoch' ? 'pruefen' : 'irrelevant'; }
+function istRelevant(b: Baugesuch): boolean { return einstufungVon(b) !== 'irrelevant' && b.status !== 'irrelevant'; }
 function spanne(a: number | null, b: number | null, fmt: (n: number) => string): string {
   if (a === null && b === null) { return ''; }
   if (a !== null && b !== null && a !== b) { return fmt(a) + ' – ' + fmt(b); }
@@ -206,7 +222,9 @@ export default function Radar() {
   const [gemeinden, setGemeinden] = useState<RadarGemeinde[]>([]);
   const [inserate, setInserate] = useState<ProjektInserat[]>([]);
   const [laden, setLaden] = useState(true);
-  const [rel, setRel] = useState<RelFilter>('hoch');
+  const [ein, setEin] = useState<EinFilter>('relevant');
+  const [kat, setKat] = useState<string>('');
+  const [typ, setTyp] = useState<string>('');
   const [stat, setStat] = useState<StatusFilter>('offen');
   const [kanton, setKanton] = useState<string>('');
   const [gemeinde, setGemeinde] = useState<string>('');
@@ -239,19 +257,40 @@ export default function Radar() {
   const gefiltert = useMemo(() => {
     const s = suche.trim().toLowerCase();
     return gesuche.filter((b) => {
-      if (rel === 'hoch' && b.relevanz !== 'hoch') { return false; }
-      if (rel === 'mittel' && b.relevanz === 'tief') { return false; }
-      if (stat === 'offen' && (b.status === 'irrelevant' || b.status === 'gesichtet' || b.neubauprojekt_id !== null)) { return false; }
+      const e = einstufungVon(b);
+      if (ein === 'relevant' && !istRelevant(b)) { return false; }
+      if (ein === 'fokus' && (e !== 'fokus' || b.status === 'irrelevant')) { return false; }
+      if (ein === 'pruefen' && (e !== 'pruefen' || b.status === 'irrelevant')) { return false; }
+      if (ein === 'ausgeblendet' && istRelevant(b)) { return false; }
+      if (kat !== '' && b.kategorie !== kat) { return false; }
+      if (typ !== '' && b.bauherr_typ !== typ) { return false; }
+      if (stat === 'offen' && ein !== 'ausgeblendet' && (b.status === 'irrelevant' || b.status === 'gesichtet' || b.neubauprojekt_id !== null)) { return false; }
       if (stat === 'beobachten' && b.status !== 'beobachten' && b.neubauprojekt_id === null) { return false; }
       if (kanton !== '' && b.kanton !== kanton) { return false; }
       if (gemeinde !== '' && b.gemeinde !== gemeinde) { return false; }
-      if (s !== '' && ![b.adresse, b.beschreibung, b.bauherr, b.projektverfasser, b.gemeinde, b.ortsteil].join(' ').toLowerCase().includes(s)) { return false; }
+      if (s !== '' && ![b.adresse, b.beschreibung, b.bauherr, b.projektverfasser, b.gemeinde, b.ortsteil, b.begruendung].join(' ').toLowerCase().includes(s)) { return false; }
       return true;
+    }).sort((x, y) => {
+      // Fokus vor Prüfen, innerhalb nach Publikationsdatum
+      const r = (b: Baugesuch) => (einstufungVon(b) === 'fokus' ? 0 : einstufungVon(b) === 'pruefen' ? 1 : 2);
+      return r(x) - r(y) || String(y.publiziert_am || '').localeCompare(String(x.publiziert_am || ''));
     });
-  }, [gesuche, rel, stat, kanton, gemeinde, suche]);
+  }, [gesuche, ein, kat, typ, stat, kanton, gemeinde, suche]);
 
-  const kpiNeu = gesuche.filter((b) => b.relevanz === 'hoch' && b.status === 'neu' && b.neubauprojekt_id === null).length;
-  const kpiFrist = gesuche.filter((b) => b.relevanz === 'hoch' && fristOffen(b)).length;
+  const anzahlEin = useMemo(() => {
+    const offenOk = (b: Baugesuch) => stat !== 'offen' || !(b.status === 'gesichtet' || b.neubauprojekt_id !== null);
+    const basis = gesuche.filter((b) => offenOk(b) && (kanton === '' || b.kanton === kanton) && (gemeinde === '' || b.gemeinde === gemeinde));
+    return {
+      relevant: basis.filter(istRelevant).length,
+      fokus: basis.filter((b) => istRelevant(b) && einstufungVon(b) === 'fokus').length,
+      pruefen: basis.filter((b) => istRelevant(b) && einstufungVon(b) === 'pruefen').length,
+      ausgeblendet: gesuche.filter((b) => !istRelevant(b) && (kanton === '' || b.kanton === kanton) && (gemeinde === '' || b.gemeinde === gemeinde)).length,
+    };
+  }, [gesuche, stat, kanton, gemeinde]);
+
+  const kpiNeu = gesuche.filter((b) => einstufungVon(b) === 'fokus' && b.status === 'neu' && b.neubauprojekt_id === null).length;
+  const kpiPruefen = gesuche.filter((b) => einstufungVon(b) === 'pruefen' && b.status === 'neu' && b.neubauprojekt_id === null).length;
+  const kpiFrist = gesuche.filter((b) => istRelevant(b) && fristOffen(b)).length;
   const kpiVerkauf = projekte.filter((p) => p.phase === 'verkauf').length;
   const kpiVormerk = projekte.filter((p) => p.phase === 'vormerkung').length;
   const letzterAbruf = gesuche.length > 0 ? gesuche.reduce((m, b) => (b.erfasst_am > m ? b.erfasst_am : m), gesuche[0].erfasst_am) : null;
@@ -259,6 +298,14 @@ export default function Radar() {
   async function gesuchStatus(b: Baugesuch, s: BaugesuchStatus) {
     setGesuche((xs) => xs.map((x) => (x.id === b.id ? { ...x, status: s } : x)));
     const { error } = await supabase.from('baugesuche').update({ status: s, aktualisiert_am: new Date().toISOString() }).eq('id', b.id);
+    if (error) { setMeldung(error.message); laden_(); }
+  }
+  async function einstufen(b: Baugesuch, e: BaugesuchEinstufung) {
+    const jetzt = new Date().toISOString();
+    setGesuche((xs) => xs.map((x) => (x.id === b.id ? { ...x, einstufung: e, klassifiziert_von: 'manuell', klassifiziert_am: jetzt, status: x.status === 'irrelevant' && e !== 'irrelevant' ? 'neu' : x.status } : x)));
+    const patch: Record<string, unknown> = { einstufung: e, klassifiziert_von: 'manuell', klassifiziert_am: jetzt, aktualisiert_am: jetzt };
+    if (b.status === 'irrelevant' && e !== 'irrelevant') { patch.status = 'neu'; }
+    const { error } = await supabase.from('baugesuche').update(patch).eq('id', b.id);
     if (error) { setMeldung(error.message); laden_(); }
   }
   async function phaseSetzen(p: Neubauprojekt, ph: NeubauPhase) {
@@ -324,8 +371,9 @@ export default function Radar() {
       <div className="kpis">
         <div className="kpi accent"><span className="small muted">Im Verkauf</span><span className="v tnum">{kpiVerkauf}</span><span className="xs muted">Projekte mit Preisen</span></div>
         <div className="kpi"><span className="small muted">Vormerkung</span><span className="v tnum">{kpiVormerk}</span><span className="xs muted">Interessentenliste offen</span></div>
-        <div className="kpi"><span className="small muted">Neue Wohnbau-Gesuche</span><span className="v tnum">{kpiNeu}</span><span className="xs muted">noch nicht angeschaut</span></div>
-        <div className="kpi"><span className="small muted">Auflage läuft</span><span className="v tnum">{kpiFrist}</span><span className="xs muted">Wohnbau-Gesuche mit offener Frist</span></div>
+        <div className="kpi"><span className="small muted">Baugesuche im Fokus</span><span className="v tnum">{kpiNeu}</span><span className="xs muted">neu, Verkauf wahrscheinlich</span></div>
+        <div className="kpi"><span className="small muted">Zu prüfen</span><span className="v tnum">{kpiPruefen}</span><span className="xs muted">neu, Vermarktung unklar</span></div>
+        <div className="kpi"><span className="small muted">Auflage läuft</span><span className="v tnum">{kpiFrist}</span><span className="xs muted">relevante Gesuche mit offener Frist</span></div>
       </div>
 
       {meldung !== null ? <div className="notice" role="status" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span>{meldung}</span><button type="button" className="linkbtn" onClick={() => setMeldung(null)}>Schliessen</button></div> : null}
@@ -384,10 +432,11 @@ export default function Radar() {
         <section className="card">
           <div className="filterbar">
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div className="seg" aria-label="Relevanz">
-                <button type="button" aria-pressed={rel === 'hoch'} onClick={() => setRel('hoch')}>Wohnbau</button>
-                <button type="button" aria-pressed={rel === 'mittel'} onClick={() => setRel('mittel')}>+ EFH</button>
-                <button type="button" aria-pressed={rel === 'alle'} onClick={() => setRel('alle')}>Alle</button>
+              <div className="seg" aria-label="Einstufung">
+                <button type="button" aria-pressed={ein === 'relevant'} onClick={() => setEin('relevant')} title="Fokus und Prüfen">Relevant <span className="tnum muted">{anzahlEin.relevant}</span></button>
+                <button type="button" aria-pressed={ein === 'fokus'} onClick={() => setEin('fokus')} title={EINSTUFUNG.fokus.hinweis}>Fokus <span className="tnum muted">{anzahlEin.fokus}</span></button>
+                <button type="button" aria-pressed={ein === 'pruefen'} onClick={() => setEin('pruefen')} title={EINSTUFUNG.pruefen.hinweis}>Prüfen <span className="tnum muted">{anzahlEin.pruefen}</span></button>
+                <button type="button" aria-pressed={ein === 'ausgeblendet'} onClick={() => setEin('ausgeblendet')} title={EINSTUFUNG.irrelevant.hinweis}>Ausgeblendet <span className="tnum muted">{anzahlEin.ausgeblendet}</span></button>
               </div>
               <div className="seg" aria-label="Status">
                 <button type="button" aria-pressed={stat === 'offen'} onClick={() => setStat('offen')}>Offen</button>
@@ -399,6 +448,14 @@ export default function Radar() {
               <select className="select" aria-label="Kanton" value={kanton} onChange={(e) => setKanton(e.target.value)}>
                 <option value="">Alle Kantone</option><option value="ZH">ZH</option><option value="SZ">SZ</option><option value="SG">SG</option>
               </select>
+              <select className="select" aria-label="Art" value={kat} onChange={(e) => setKat(e.target.value)}>
+                <option value="">Alle Arten</option>
+                {(Object.keys(KATEGORIE) as BaugesuchKategorie[]).map((k) => <option key={k} value={k}>{KATEGORIE[k]}</option>)}
+              </select>
+              <select className="select" aria-label="Bauherr" value={typ} onChange={(e) => setTyp(e.target.value)}>
+                <option value="">Alle Bauherren</option>
+                {(Object.keys(BAUHERR) as BauherrTyp[]).map((k) => <option key={k} value={k}>{BAUHERR[k]}</option>)}
+              </select>
               <select className="select" aria-label="Gemeinde" value={gemeinde} onChange={(e) => setGemeinde(e.target.value)}>
                 <option value="">Alle Gemeinden</option>
                 {gemeindenMitGesuchen.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -406,16 +463,17 @@ export default function Radar() {
               <input className="input radar-suche" type="search" aria-label="Suche" placeholder="Adresse, Bauherr, Architekt …" value={suche} onChange={(e) => setSuche(e.target.value)} />
             </div>
           </div>
-          <div className="list-head small muted">{gefiltert.length} Baugesuche{letzterAbruf ? ' · zuletzt neu erfasst ' + dateLong(letzterAbruf) : ''}</div>
+          <div className="list-head small muted">{gefiltert.length} Baugesuche{letzterAbruf ? ' · zuletzt neu erfasst ' + dateLong(letzterAbruf) : ''} · Fokus: Entwickler, Architekten und Private, die mehrere Einheiten bauen. Ausgeblendet: Umbauten, Nebenbauten, ein EFH für den Eigenbedarf, Mietwohnungsbau.</div>
           <div className="radar-gesuche">
             {gefiltert.slice(0, anzahl).map((b) => {
               const projekt = b.neubauprojekt_id !== null ? projekte.find((p) => p.id === b.neubauprojekt_id) : undefined;
               return (
-                <div key={b.id} className={'radar-gesuch' + (b.status === 'neu' && b.neubauprojekt_id === null ? ' neu' : '')}>
+                <div key={b.id} className={'radar-gesuch' + (b.status === 'neu' && b.neubauprojekt_id === null && istRelevant(b) ? ' neu' : '') + (einstufungVon(b) === 'fokus' ? ' fokus' : '') + (!istRelevant(b) ? ' aus' : '')}>
                   <div className="radar-gesuch-kopf">
                     <span className="tnum small muted">{dateShort(b.publiziert_am)}</span>
                     <span className="radar-gesuch-ort">{b.gemeinde}{b.ortsteil && b.gemeinde && !b.gemeinde.toLowerCase().startsWith(b.ortsteil.toLowerCase().replace(/\s+(zh|sz|sg)$/, '')) ? ' (' + b.ortsteil + ')' : ''}</span>
-                    <span className={relChip(b.relevanz)}>{b.relevanz === 'hoch' ? 'Wohnbau' : b.relevanz === 'mittel' ? 'EFH' : 'Übrige'}</span>
+                    <span className={EINSTUFUNG[einstufungVon(b)].chip} title={EINSTUFUNG[einstufungVon(b)].hinweis}>{EINSTUFUNG[einstufungVon(b)].name}</span>
+                    {b.kategorie !== null ? <span className="chip outline">{KATEGORIE[b.kategorie]}</span> : null}
                     {b.wohnungen !== null ? <span className="chip outline">{b.wohnungen} Einheiten</span> : null}
                     {fristOffen(b) ? <span className="chip outline" title="Öffentliche Auflage läuft">Auflage bis {dateShort(b.frist_bis)}</span> : null}
                     {b.status === 'beobachten' && b.neubauprojekt_id === null ? <span className="chip accent">beobachtet</span> : null}
@@ -423,8 +481,18 @@ export default function Radar() {
                   </div>
                   <div className="radar-gesuch-adr">{b.adresse}</div>
                   <div className="small" style={{ color: 'var(--ink-2)' }}>{b.beschreibung}</div>
-                  {b.bauherr || b.projektverfasser ? (
-                    <div className="xs muted">{b.bauherr ? 'Bauherr: ' + b.bauherr : ''}{b.bauherr && b.projektverfasser ? ' · ' : ''}{b.projektverfasser ? 'Projekt: ' + b.projektverfasser : ''}</div>
+                  <div className="xs muted">
+                    {[
+                      'Bauherr: ' + (b.bauherr ? b.bauherr : b.bauherr_typ !== null ? BAUHERR[b.bauherr_typ] : 'unbekannt') + (b.bauherr && b.bauherr_typ !== null && b.bauherr_typ !== 'firma' && b.bauherr_typ !== 'unbekannt' ? ' (' + BAUHERR[b.bauherr_typ] + ')' : ''),
+                      b.projektverfasser ? 'Projekt: ' + b.projektverfasser : null,
+                      b.vermarktung !== null ? VERMARKTUNG[b.vermarktung] : null,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                  {b.begruendung ? (
+                    <div className="xs radar-begruendung">
+                      {b.begruendung}
+                      <span className="muted">{b.klassifiziert_von === 'manuell' ? ' · von euch gesetzt' : b.klassifiziert_von === 'regel' ? ' · vorläufig (Regel)' : ''}</span>
+                    </div>
                   ) : null}
                   <div className="radar-gesuch-fuss">
                     {b.url ? <a className="small" href={b.url} target="_blank" rel="noreferrer">{b.quelle}</a> : <span className="small muted">{b.quelle}</span>}
@@ -439,7 +507,11 @@ export default function Radar() {
                         ) : null}
                         {b.status !== 'beobachten' && b.neubauprojekt_id === null ? <button type="button" className="btn sm" onClick={() => gesuchStatus(b, 'beobachten')}>Beobachten</button> : null}
                         {b.status === 'neu' ? <button type="button" className="btn sm" onClick={() => gesuchStatus(b, 'gesichtet')}>Gesehen</button> : null}
-                        {b.status !== 'irrelevant' ? <button type="button" className="btn sm" onClick={() => gesuchStatus(b, 'irrelevant')}>Irrelevant</button> : <button type="button" className="btn sm" onClick={() => gesuchStatus(b, 'neu')}>Wiederherstellen</button>}
+                        <select className="select radar-phase" aria-label="Einstufung ändern" value={istRelevant(b) ? einstufungVon(b) : 'irrelevant'} onChange={(e) => einstufen(b, e.target.value as BaugesuchEinstufung)}>
+                          <option value="fokus">Fokus</option>
+                          <option value="pruefen">Prüfen</option>
+                          <option value="irrelevant">Ausblenden</option>
+                        </select>
                       </div>
                     ) : null}
                   </div>
@@ -465,7 +537,7 @@ export default function Radar() {
                     <input type="checkbox" checked={g.aktiv} disabled={leser} onChange={(e) => gemeindeAktiv(g, e.target.checked)} />
                     <span>{g.name}</span>
                     <span className="xs muted">{g.hinweis || ''}</span>
-                    <span className="xs muted tnum">{gesuche.filter((b) => b.gemeinde === g.name && b.relevanz === 'hoch').length || ''}</span>
+                    <span className="xs muted tnum">{gesuche.filter((b) => b.gemeinde === g.name && istRelevant(b)).length || ''}</span>
                   </label>
                 ))}
               </div>
@@ -479,7 +551,7 @@ export default function Radar() {
               <button type="button" className="btn" onClick={gemeindeNeu}>Hinzufügen</button>
             </div>
           ) : null}
-          <p className="xs muted" style={{ marginTop: 14 }}>Zahl rechts: Wohnbau-Baugesuche der letzten 12 Monate. Neue Gemeinden werden ab dem nächsten täglichen Abruf berücksichtigt (rückwirkend 3 Tage).</p>
+          <p className="xs muted" style={{ marginTop: 14 }}>Zahl rechts: relevante Baugesuche (Fokus und Prüfen) der letzten 12 Monate. Neue Gemeinden werden ab dem nächsten täglichen Abruf berücksichtigt (rückwirkend 3 Tage).</p>
         </section>
       ) : null}
 

@@ -480,6 +480,9 @@ table.list th:first-child .th-sort { padding-left: 18px; padding-right: 0; }
 .radar-gesuche { display: flex; flex-direction: column; }
 .radar-gesuch { padding: 14px 22px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 4px; }
 .radar-gesuch.neu { box-shadow: inset 3px 0 0 var(--warm); }
+.radar-gesuch.fokus.neu { box-shadow: inset 3px 0 0 var(--green, var(--warm)); }
+.radar-gesuch.aus { opacity: .72; }
+.radar-begruendung { color: var(--ink-2); background: var(--col-bg); border-radius: var(--radius-s); padding: 4px 8px; align-self: flex-start; max-width: 100%; overflow-wrap: anywhere; }
 .radar-gesuch-kopf { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .radar-gesuch-ort { font-weight: 600; }
 .radar-gesuch-adr { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
