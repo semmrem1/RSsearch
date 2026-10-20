@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { pushAktivieren, pushDeaktivieren, pushStatus, pushMoeglich } from '../lib/push';
 import { chf } from '../lib/format';
-import type { Gemeinde, Haushalt } from '../lib/types';
+import type { BudgetPosten, Gemeinde, Haushalt, Profile } from '../lib/types';
+import { budget } from '../lib/budget';
 
 function Zahl({ id, label, wert, onChange, hinweis, einheit }: { id: string; label: string; wert: number | null; onChange: (v: number | null) => void; hinweis?: string; einheit?: string }) {
   return (
@@ -17,7 +18,11 @@ function Zahl({ id, label, wert, onChange, hinweis, einheit }: { id: string; lab
 }
 
 export default function Einstellungen() {
-  const { me, profiles, haushalt, reloadStammdaten } = useApp();
+  const { me, profiles, haushalt, budgetPosten, reloadStammdaten } = useApp();
+  const [personen, setPersonen] = useState<Profile[]>([]);
+  const [posten, setPosten] = useState<BudgetPosten[]>([]);
+  const [neuPosten, setNeuPosten] = useState('');
+  const [budgetMeldung, setBudgetMeldung] = useState<string | null>(null);
   const [h, setH] = useState<Haushalt>(haushalt);
   const [hGespeichert, setHGespeichert] = useState<string | null>(null);
   const [push, setPush] = useState<'aktiv' | 'aus' | 'blockiert' | 'unmoeglich' | 'lade'>('lade');
@@ -31,6 +36,8 @@ export default function Einstellungen() {
   const [keyMeldung, setKeyMeldung] = useState<string | null>(null);
 
   useEffect(() => { setH(haushalt); }, [haushalt]);
+  useEffect(() => { setPersonen(profiles); }, [profiles]);
+  useEffect(() => { setPosten(budgetPosten); }, [budgetPosten]);
   useEffect(() => {
     pushStatus().then(setPush);
     supabase.from('gemeinden').select('*').order('kanton').order('name').then(({ data }) => { if (data) { setGemeinden(data as Gemeinde[]); } });
@@ -82,6 +89,33 @@ export default function Einstellungen() {
     if (push === 'aktiv') { await pushDeaktivieren(); setPush('aus'); return; }
     const err = await pushAktivieren(me.id);
     if (err !== null) { setPushMeldung(err); } else { setPush('aktiv'); setPushMeldung('Aktiviert. Testnachricht wird gesendet …'); await supabase.rpc('push_senden', { p_titel: 'RSsearch', p_text: 'Push-Benachrichtigungen sind aktiv.', p_url: '/', p_user_ids: [me.id] }); }
+  }
+
+  async function personSpeichern(p: Profile) {
+    const { error } = await supabase.from('profiles').update({ nettolohn_100_monat: p.nettolohn_100_monat !== undefined ? p.nettolohn_100_monat : null, pensum_pct: p.pensum_pct !== undefined && p.pensum_pct !== null ? p.pensum_pct : 100 }).eq('id', p.id);
+    setBudgetMeldung(error ? error.message : 'Gespeichert');
+    if (!error) { reloadStammdaten(); }
+  }
+
+  async function postenSpeichern(x: BudgetPosten) {
+    const { error } = await supabase.from('budget_posten').upsert({ id: x.id, name: x.name, betrag_monat: Math.round(Number(x.betrag_monat) || 0), kategorie: x.kategorie, sort: x.sort });
+    setBudgetMeldung(error ? error.message : 'Gespeichert');
+    if (!error) { reloadStammdaten(); }
+  }
+
+  async function postenNeu() {
+    if (neuPosten.trim() === '') { return; }
+    const sort = posten.reduce((m, x) => Math.max(m, x.sort), 0) + 10;
+    const { error } = await supabase.from('budget_posten').insert({ name: neuPosten.trim(), betrag_monat: 0, kategorie: 'fix', sort });
+    setBudgetMeldung(error ? error.message : 'Hinzugefügt');
+    if (!error) { setNeuPosten(''); reloadStammdaten(); }
+  }
+
+  async function postenLoeschen(x: BudgetPosten) {
+    if (!window.confirm('«' + x.name + '» aus den Standardausgaben entfernen?')) { return; }
+    const { error } = await supabase.from('budget_posten').delete().eq('id', x.id);
+    setBudgetMeldung(error ? error.message : 'Entfernt');
+    if (!error) { reloadStammdaten(); }
   }
 
   async function gemeindeSpeichern(g: Gemeinde) {
@@ -153,6 +187,57 @@ export default function Einstellungen() {
               <button type="button" className="btn primary" onClick={haushaltSpeichern}>Speichern</button>
               {hGespeichert !== null ? <span className="small muted">{hGespeichert}</span> : null}
               {h.eigenkapital !== null && h.einkommen_jahr !== null ? <span className="small muted">Beispiel 2.0 Mio: Hypothek CHF {chf(Math.max(0, 2000000 - h.eigenkapital))}</span> : null}
+            </div>
+          </section>
+
+          <section className="card pad" aria-labelledby="budget-h">
+            <h2 id="budget-h">Budget</h2>
+            <p className="small muted" style={{ marginTop: 4 }}>Standardwerte für die Budgetrechnung auf jeder Inseratsseite. Dort lassen sich Pensum und Ausgaben pro Objekt abweichend eintragen.</p>
+            <h3 className="small" style={{ marginTop: 14, fontWeight: 600 }}>Einkommen</h3>
+            <div className="rows" style={{ marginTop: 6 }}>
+              {personen.map((p) => (
+                <div key={p.id} className="budget-person">
+                  <span style={{ color: p.farbe, fontWeight: 600 }}>{p.name.split(' ')[0]}</span>
+                  <label className="field"><span className="xs muted">Nettolohn pro Monat bei 100 %</span>
+                    <input className="input" inputMode="numeric" value={p.nettolohn_100_monat !== null && p.nettolohn_100_monat !== undefined ? String(p.nettolohn_100_monat) : ''} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ''); setPersonen(personen.map((x) => (x.id === p.id ? { ...x, nettolohn_100_monat: v === '' ? null : Number(v) } : x))); }} onBlur={() => personSpeichern(personen.find((x) => x.id === p.id) as Profile)} />
+                  </label>
+                  <label className="field"><span className="xs muted">Pensum %</span>
+                    <input className="input" inputMode="numeric" value={p.pensum_pct !== null && p.pensum_pct !== undefined ? String(p.pensum_pct) : '100'} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ''); setPersonen(personen.map((x) => (x.id === p.id ? { ...x, pensum_pct: v === '' ? 0 : Math.min(100, Number(v)) } : x))); }} onBlur={() => personSpeichern(personen.find((x) => x.id === p.id) as Profile)} />
+                  </label>
+                  <span className="tnum small" style={{ textAlign: 'right', fontWeight: 600 }}>{chf(Math.round((Number(p.nettolohn_100_monat) || 0) * (p.pensum_pct !== null && p.pensum_pct !== undefined ? Number(p.pensum_pct) : 100) / 100))}</span>
+                </div>
+              ))}
+            </div>
+            <div className="form-grid" style={{ marginTop: 10 }}>
+              <Zahl id="weitere" label="Weitere Einkünfte pro Monat" einheit="CHF" wert={h.weitere_einkuenfte_monat} onChange={(v) => setH({ ...h, weitere_einkuenfte_monat: v !== null ? v : 0 })} hinweis="Kinderzulagen, Nebenerwerb, Mieteinnahmen" />
+              <Zahl id="zinseff" label="Effektiver Hypozins" einheit="%" wert={h.zins_effektiv} onChange={(v) => setH({ ...h, zins_effektiv: v !== null ? v : 1.5 })} hinweis="Für das Budget; die Tragbarkeit rechnet weiter mit dem kalkulatorischen Zins" />
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10 }}>
+              <button type="button" className="btn" onClick={haushaltSpeichern}>Einkünfte und Zins speichern</button>
+              <span className="small muted tnum">Haushaltseinkommen: CHF {chf(budget(null, h, personen, posten).einkommen)} pro Monat</span>
+            </div>
+
+            <h3 className="small" style={{ marginTop: 18, fontWeight: 600 }}>Ausgaben pro Monat (Standard)</h3>
+            <div className="rows" style={{ marginTop: 6 }}>
+              {posten.map((x) => (
+                <div key={x.id} className="budget-posten">
+                  <input className="input" aria-label="Name" value={x.name} onChange={(e) => setPosten(posten.map((y) => (y.id === x.id ? { ...y, name: e.target.value } : y)))} onBlur={() => postenSpeichern(posten.find((y) => y.id === x.id) as BudgetPosten)} />
+                  <select className="select" aria-label="Kategorie" value={x.kategorie} onChange={(e) => { const neu = posten.map((y) => (y.id === x.id ? { ...y, kategorie: e.target.value as BudgetPosten['kategorie'] } : y)); setPosten(neu); postenSpeichern(neu.find((y) => y.id === x.id) as BudgetPosten); }}>
+                    <option value="fix">fix</option><option value="variabel">variabel</option><option value="sparen">sparen</option>
+                  </select>
+                  <input className="input budget-input" style={{ width: 100 }} inputMode="numeric" aria-label="Betrag" value={String(x.betrag_monat)} onChange={(e) => setPosten(posten.map((y) => (y.id === x.id ? { ...y, betrag_monat: Number(e.target.value.replace(/[^0-9]/g, '')) || 0 } : y)))} onBlur={() => postenSpeichern(posten.find((y) => y.id === x.id) as BudgetPosten)} />
+                  <button type="button" className="linkbtn" aria-label={x.name + ' entfernen'} onClick={() => postenLoeschen(x)}>✕</button>
+                </div>
+              ))}
+              <div className="budget-posten" style={{ background: 'var(--bg)' }}>
+                <input className="input" placeholder="Neuer Posten" aria-label="Neuer Posten" value={neuPosten} onChange={(e) => setNeuPosten(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { postenNeu(); } }} />
+                <span /><span />
+                <button type="button" className="btn sm" onClick={postenNeu} disabled={neuPosten.trim() === ''}>+</button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+              <span className="small muted tnum">Total Ausgaben: CHF {chf(posten.reduce((s, x) => s + (Number(x.betrag_monat) || 0), 0))} pro Monat</span>
+              {budgetMeldung !== null ? <span className="small muted">· {budgetMeldung}</span> : null}
             </div>
           </section>
 

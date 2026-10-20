@@ -11,6 +11,7 @@ import { geocode, geoSuchtext } from '../lib/geo';
 import KriterienGrid from '../components/KriterienGrid';
 import Galerie from '../components/Galerie';
 import ZusammenfuehrenModal from '../components/ZusammenfuehrenModal';
+import BudgetKarte from '../components/BudgetKarte';
 import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import type { ExposeExtrakt, Gemeinde } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
@@ -346,6 +347,11 @@ export default function Detail() {
 
       <div className="two-col">
         <div className="main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          <section className="card pad" aria-labelledby="budget-h">
+            <div className="card-head"><h2 id="budget-h">Budget pro Monat</h2><span className="small muted">Einkommen nach Pensum, Wohnkosten dieses Objekts, Ausgaben</span></div>
+            <BudgetKarte objektId={o.id} preis={o.preis_chf} />
+          </section>
 
           <section className="card pad" aria-labelledby="price-h">
             <div className="card-head"><h2 id="price-h">Preis- und Inseratsverlauf</h2><span className="small muted">Jede Änderung, die der tägliche Lauf erkennt</span></div>

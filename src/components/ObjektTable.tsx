@@ -7,15 +7,19 @@ import { StarsText } from './Stars';
 import ObjektBild from './ObjektBild';
 import { quelleDirekt } from '../lib/links';
 import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
-import type { Haushalt } from '../lib/types';
+import type { BudgetPosten, Haushalt, Profile } from '../lib/types';
+import { budget, ueberschussFarbe } from '../lib/budget';
 
 type Richtung = 'asc' | 'desc';
 interface Sortierung { key: string; dir: Richtung }
 
 const STANDARD: Sortierung = { key: 'erfasst', dir: 'desc' };
 
-function wert(r: ObjektUebersicht, key: string, ctx: { h: Haushalt; me: string | null }): number | string | null {
+interface SortCtx { h: Haushalt; me: string | null; profiles: Profile[]; posten: BudgetPosten[] }
+
+function wert(r: ObjektUebersicht, key: string, ctx: SortCtx): number | string | null {
   switch (key) {
+    case 'budget': { const b = budget(r.preis_chf, ctx.h, ctx.profiles, ctx.posten); return b.vollstaendig ? b.ueberschuss : null; }
     case 'tage': return r.tage_am_markt;
     case 'score': return r.score_gesamt;
     case 'tragbar': { const t = tragbarkeit(r.preis_chf, ctx.h); return t !== null && t.quote !== null ? (t.ekZuTief ? 9 : t.quote) : null; }
@@ -37,7 +41,7 @@ function wert(r: ObjektUebersicht, key: string, ctx: { h: Haushalt; me: string |
   }
 }
 
-function sortieren(rows: ObjektUebersicht[], s: Sortierung, ctx: { h: Haushalt; me: string | null }): ObjektUebersicht[] {
+function sortieren(rows: ObjektUebersicht[], s: Sortierung, ctx: SortCtx): ObjektUebersicht[] {
   const f = s.dir === 'asc' ? 1 : -1;
   return rows.slice().sort((a, b) => {
     const va = wert(a, s.key, ctx);
@@ -59,8 +63,8 @@ function lesen(): Sortierung {
 }
 
 export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
-  const { profiles, haushalt, me } = useApp();
-  const ctx = { h: haushalt, me: me !== null ? me.id : null };
+  const { profiles, haushalt, me, budgetPosten } = useApp();
+  const ctx: SortCtx = { h: haushalt, me: me !== null ? me.id : null, profiles, posten: budgetPosten };
   const [sort, setSortState] = useState<Sortierung>(lesen);
 
   function setSort(s: Sortierung) {
@@ -89,6 +93,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
     { key: 'quelle', label: 'Quelle' },
     { key: 'tragbar', label: 'Tragbar', r: true },
     { key: 'pendeln', label: 'Pendeln', r: true },
+    { key: 'budget', label: 'Budget', r: true },
     { key: 'stufe', label: 'Pipeline' },
     { key: 'score', label: 'Score', r: true },
     ...profiles.map((p) => ({ key: 'p:' + p.id, label: p.name.split(' ')[0] })),
@@ -129,6 +134,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
         <span className={'chip ' + (r.tage_am_markt > 90 ? 'warm' : 'neutral')} title="Tage am Markt">{r.tage_am_markt} Tage</span>
         {t !== null && t.quote !== null ? <span className="chip neutral" style={{ color: stufeFarbe(t.stufe), fontWeight: 700 }} title="Tragbarkeit">{t.ekZuTief ? 'EK zu tief' : 'Tragbarkeit ' + quoteText(t)}</span> : null}
         {pz !== null ? <span className="chip neutral" title={'ÖV ab ' + (pz.von || '')}>🚆 {pz.minuten} Min</span> : null}
+        {(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten); return b.vollstaendig ? <span className="chip neutral" style={{ color: ueberschussFarbe(b), fontWeight: 700 }} title="Budget-Überschuss pro Monat mit Standardwerten">{b.ueberschuss < 0 ? '−' : '+'}{chf(Math.abs(b.ueberschuss))}/Mt</span> : null; })()}
         {r.score_gesamt !== null ? <span className="chip neutral" title="Kriterien-Score">Score {Number(r.score_gesamt).toFixed(1)}</span> : null}
       </>
     );
@@ -150,7 +156,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
       <div className="mob sort-mob">
         <label htmlFor="sort-mob" className="small muted">Sortieren</label>
         <select id="sort-mob" className="select" value={sort.key} onChange={(e) => klick(e.target.value)}>
-          {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Bewertung ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.label}</option>)}
+          {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Bewertung ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.key === 'budget' ? 'Budget-Überschuss' : s.label}</option>)}
         </select>
         <button type="button" className="btn sm" onClick={() => setSort({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })} aria-label={sort.dir === 'asc' ? 'Aufsteigend, umkehren' : 'Absteigend, umkehren'}>
           {sort.dir === 'asc' ? '▲ auf' : '▼ ab'}
@@ -223,6 +229,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                   <td><div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{quellenChips(r)}</div></td>
                   <td className="r tnum">{(() => { const t = tragbarkeit(r.preis_chf, haushalt); if (t === null || (t.quote === null && !t.ekZuTief)) { return <span className="muted">–</span>; } return <span style={{ color: stufeFarbe(t.stufe), fontWeight: 600 }} title={'Kosten/Jahr CHF ' + chf(t.kosten) + (t.ekZuTief ? ' · Belehnung ' + (t.belehnung * 100).toFixed(0) + ' %' : '')}>{t.ekZuTief ? 'EK' : quoteText(t)}</span>; })()}</td>
                   <td className="r tnum">{(() => { const pz = meinePendel(r); return pz !== null ? <span title={'ab ' + (pz.von || '') + ' nach ' + (pz.nach || '')}>{pz.minuten}'</span> : <span className="muted">–</span>; })()}</td>
+                  <td className="r tnum">{(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten); return b.vollstaendig ? <span style={{ color: ueberschussFarbe(b), fontWeight: 600 }} title={'Einkommen ' + chf(b.einkommen) + ' − Wohnen ' + chf(b.wohnen.total) + ' − Ausgaben ' + chf(b.ausgabenTotal)}>{b.ueberschuss < 0 ? '−' : ''}{chf(Math.abs(b.ueberschuss))}</span> : <span className="muted">–</span>; })()}</td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 170 }}>
                       <span className="small" style={{ fontWeight: 500 }}>{r.stufe_name}{neuFuerMich(r) ? <span className="chip accent" style={{ marginLeft: 6 }}>💬 neu</span> : null}</span>

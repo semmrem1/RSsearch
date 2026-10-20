@@ -10,6 +10,8 @@ export interface Profile {
   arbeitsort_lat?: number | null;
   arbeitsort_lng?: number | null;
   arbeitsort_station?: string | null;
+  nettolohn_100_monat?: number | null;
+  pensum_pct?: number | null;
 }
 
 export interface Haushalt {
@@ -21,6 +23,17 @@ export interface Haushalt {
   amortisation_jahre: number;
   belehnung_max: number;
   tragbarkeit_max: number;
+  zins_effektiv: number;
+  weitere_einkuenfte_monat: number;
+}
+
+export interface BudgetPosten { id: string; name: string; betrag_monat: number; kategorie: 'fix' | 'variabel' | 'sparen'; sort: number }
+export interface ObjektBudgetDaten {
+  pensum?: Record<string, number>;
+  posten?: Record<string, number>;
+  extra?: { name: string; betrag: number }[];
+  zins_effektiv?: number;
+  weitere_einkuenfte?: number;
 }
 
 export interface Gemeinde {

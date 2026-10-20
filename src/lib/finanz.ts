@@ -12,7 +12,7 @@ export interface Tragbarkeit {
   stufe: 'ok' | 'knapp' | 'nein' | 'unbekannt';
 }
 
-export const HAUSHALT_STANDARD: Haushalt = { id: 1, eigenkapital: null, einkommen_jahr: null, zins_kalk: 5, nebenkosten_pct: 1, amortisation_jahre: 15, belehnung_max: 80, tragbarkeit_max: 33 };
+export const HAUSHALT_STANDARD: Haushalt = { id: 1, eigenkapital: null, einkommen_jahr: null, zins_kalk: 5, nebenkosten_pct: 1, amortisation_jahre: 15, belehnung_max: 80, tragbarkeit_max: 33, zins_effektiv: 1.5, weitere_einkuenfte_monat: 0 };
 
 /** Bankübliche Tragbarkeitsrechnung: kalkulatorischer Zins, 1 % Nebenkosten, Amortisation der 2. Hypothek auf 65 %. */
 export function tragbarkeit(preis: number | null, h: Haushalt): Tragbarkeit | null {
