@@ -21,7 +21,7 @@ export default function Login() {
       <form className="card" onSubmit={submit}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" fill="#1D5B84" /><path d="M7 18V11l6-4 6 4v7" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinejoin="round" /><path d="M11 18v-4h4v4" fill="none" stroke="#FFFFFF" strokeWidth="2" /></svg>
-          <span style={{ fontWeight: 700, fontSize: 17 }}>RSsearch</span>
+          <span style={{ fontWeight: 700, fontSize: 17 }}>PRimmo</span>
         </div>
         <p className="muted">Anmelden mit deinem Konto.</p>
         <div className="field">

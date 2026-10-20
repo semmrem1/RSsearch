@@ -48,7 +48,7 @@ export default function Layout() {
     <>
       <header className="app-header">
         <div className="inner">
-          <Link to="/" className="brand"><Logo />RSsearch</Link>
+          <Link to="/" className="brand"><Logo />PRimmo</Link>
           <nav className="nav" aria-label="Hauptnavigation">
             <NavLink to="/" end>Übersicht</NavLink>
             <NavLink to="/pipeline">Pipeline</NavLink>

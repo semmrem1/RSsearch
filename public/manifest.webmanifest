@@ -1,6 +1,6 @@
 {
-  "name": "RSsearch Eigenheimsuche",
-  "short_name": "RSsearch",
+  "name": "PRimmo Eigenheimsuche",
+  "short_name": "PRimmo",
   "description": "Immobilien-Tracker für die Eigenheimsuche",
   "lang": "de-CH",
   "start_url": "/",

@@ -1,4 +1,4 @@
-# RSsearch
+# PRimmo (Repo RSsearch)
 
 Immobilien-Tracker für die Eigenheimsuche von Remo und Pascale. React + Vite + Supabase, gehostet auf Cloudflare Pages.
 

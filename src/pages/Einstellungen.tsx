@@ -88,7 +88,7 @@ export default function Einstellungen() {
     setPushMeldung(null);
     if (push === 'aktiv') { await pushDeaktivieren(); setPush('aus'); return; }
     const err = await pushAktivieren(me.id);
-    if (err !== null) { setPushMeldung(err); } else { setPush('aktiv'); setPushMeldung('Aktiviert. Testnachricht wird gesendet …'); await supabase.rpc('push_senden', { p_titel: 'RSsearch', p_text: 'Push-Benachrichtigungen sind aktiv.', p_url: '/', p_user_ids: [me.id] }); }
+    if (err !== null) { setPushMeldung(err); } else { setPush('aktiv'); setPushMeldung('Aktiviert. Testnachricht wird gesendet …'); await supabase.rpc('push_senden', { p_titel: 'PRimmo', p_text: 'Push-Benachrichtigungen sind aktiv.', p_url: '/', p_user_ids: [me.id] }); }
   }
 
   async function personSpeichern(p: Profile) {

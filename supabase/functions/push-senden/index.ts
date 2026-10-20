@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   if (!b.ok) { return json({ error: 'nicht berechtigt' }, 401); }
   const body = await leseBody(req);
 
-  const titel = typeof body.titel === 'string' ? body.titel : 'RSsearch';
+  const titel = typeof body.titel === 'string' ? body.titel : 'PRimmo';
   const text = typeof body.text === 'string' ? body.text : '';
   const url = typeof body.url === 'string' && body.url !== '' ? body.url : '/';
   const tag = typeof body.tag === 'string' ? body.tag : undefined;

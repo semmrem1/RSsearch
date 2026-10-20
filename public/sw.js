@@ -1,4 +1,4 @@
-// RSsearch Service Worker: App-Shell offline, Objektbilder cache-first, Web Push.
+// PRimmo Service Worker: App-Shell offline, Objektbilder cache-first, Web Push.
 const CACHE = 'rssearch-v2';
 const BILDER = 'rssearch-bilder-v1';
 const BILDER_MAX = 400;
@@ -60,7 +60,7 @@ self.addEventListener('fetch', (e) => {
 
 // Web Push
 self.addEventListener('push', (e) => {
-  let d = { titel: 'RSsearch', text: '', url: '/', tag: undefined };
+  let d = { titel: 'PRimmo', text: '', url: '/', tag: undefined };
   try { d = Object.assign(d, e.data ? e.data.json() : {}); } catch { d.text = e.data ? e.data.text() : ''; }
   e.waitUntil(self.registration.showNotification(d.titel, {
     body: d.text,
