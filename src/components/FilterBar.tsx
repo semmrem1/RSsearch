@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { FILTER_STANDARD, filterAktiv, ortListe, type ObjektFilter } from '../lib/filter';
 import type { ObjektUebersicht } from '../lib/types';
+import { AMPEL_LABEL } from '../lib/ampel';
 
 interface Props {
   objekte: ObjektUebersicht[];
@@ -100,6 +101,13 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
             {phasen.map(([p, n]) => <option key={p} value={String(p)}>{n}</option>)}
           </select>
         ) : null}
+        <select className="select" aria-label="Einschätzung" value={wert.ampel} onChange={(e) => set({ ampel: e.target.value as ObjektFilter['ampel'] })}>
+          <option value="alle">Einschätzung: alle</option>
+          <option value="gruen">🟢 {AMPEL_LABEL.gruen}</option>
+          <option value="gelb">🟡 {AMPEL_LABEL.gelb}</option>
+          <option value="rot">🔴 {AMPEL_LABEL.rot}</option>
+          <option value="grau">⚪ {AMPEL_LABEL.grau}</option>
+        </select>
         <select className="select" aria-label="Favoriten" value={wert.fav} onChange={(e) => set({ fav: e.target.value })}>
           <option value="alle">Favoriten: alle</option>
           {profiles.map((p) => <option key={p.id} value={p.id}>Favoriten {p.name.split(' ')[0]}{me !== null && me.id === p.id ? ' (ich)' : ''}</option>)}

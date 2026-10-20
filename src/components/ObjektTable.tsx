@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, typLabel, marktText } from '../lib/format';
@@ -9,6 +9,7 @@ import { quelleDirekt } from '../lib/links';
 import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import type { BudgetPosten, Haushalt, Profile } from '../lib/types';
 import { budget, ueberschussFarbe } from '../lib/budget';
+import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
 
 type Richtung = 'asc' | 'desc';
 interface Sortierung { key: string; dir: Richtung }
@@ -19,6 +20,7 @@ interface SortCtx { h: Haushalt; me: string | null; profiles: Profile[]; posten:
 
 function wert(r: ObjektUebersicht, key: string, ctx: SortCtx): number | string | null {
   switch (key) {
+    case 'ampel': { const a = ampel(r, ctx.h, ctx.profiles, ctx.posten).stufe; return a === 'gruen' ? 3 : a === 'gelb' ? 2 : a === 'rot' ? 1 : 0; }
     case 'budget': { const b = budget(r.preis_chf, ctx.h, ctx.profiles, ctx.posten); return b.vollstaendig ? b.ueberschuss : null; }
     case 'tage': return r.tage_am_markt;
     case 'score': return r.score_gesamt;
@@ -84,28 +86,29 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
   const neuFuerMich = (r: ObjektUebersicht): boolean => me !== null && r.letzte_aktivitaet_user !== null && r.letzte_aktivitaet_user !== me.id && r.letzte_aktivitaet_am !== null && (r.mein_besuch_am === null || r.letzte_aktivitaet_am > r.mein_besuch_am);
   const meinePendel = (r: ObjektUebersicht) => (me !== null && r.pendelzeiten[me.id] ? r.pendelzeiten[me.id] : null);
 
-  const spalten: { key: string; label: string; r?: boolean }[] = [
+  const spalten: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean }[] = [
+    { key: 'ampel', label: '', titel: 'Einschätzung (Ampel)' },
     { key: 'ort', label: 'Objekt' },
     { key: 'zimmer', label: 'Zi', r: true },
     { key: 'flaeche', label: 'm²', r: true },
     { key: 'preis', label: 'Preis CHF', r: true },
     { key: 'chfm2', label: 'CHF/m²', r: true },
     { key: 'quelle', label: 'Quelle' },
-    { key: 'tragbar', label: 'Tragbar', r: true },
-    { key: 'pendeln', label: 'Pendeln', r: true },
-    { key: 'budget', label: 'Budget', r: true },
+    { key: 'tragbar', label: 'Tragbar', titel: 'Tragbarkeit Bank (Anteil am Einkommen)', r: true },
+    { key: 'pendeln', label: 'ÖV', titel: 'Pendelzeit zu meinem Arbeitsort', r: true },
+    { key: 'budget', label: 'Budget', titel: 'Budget-Überschuss pro Monat', r: true },
     { key: 'stufe', label: 'Pipeline' },
     { key: 'score', label: 'Score', r: true },
-    ...profiles.map((p) => ({ key: 'p:' + p.id, label: p.name.split(' ')[0] })),
-    { key: 'tage', label: 'Tage', r: true },
-    { key: 'erfasst', label: 'Erfasst' },
+    ...profiles.map((p) => ({ key: 'p:' + p.id, label: <span className="avatar sm th-avatar" style={{ background: p.farbe }}>{p.kuerzel}</span>, titel: 'Sterne ' + p.name })),
+    { key: 'tage', label: 'Tage', titel: 'Tage am Markt', r: true },
+    { key: 'erfasst', label: 'Erfasst', breit: true },
   ];
 
-  const kopf = (s: { key: string; label: string; r?: boolean }) => {
+  const kopf = (s: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean }) => {
     const aktiv = sort.key === s.key;
     return (
-      <th key={s.key} className={s.r ? 'r' : undefined} aria-sort={aktiv ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-        <button type="button" className={'th-sort' + (aktiv ? ' aktiv' : '')} onClick={() => klick(s.key)}>
+      <th key={s.key} className={[s.r ? 'r' : '', s.breit ? 'nur-breit' : ''].join(' ').trim() || undefined} aria-sort={aktiv ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button type="button" className={'th-sort' + (aktiv ? ' aktiv' : '')} onClick={() => klick(s.key)} title={s.titel}>
           {s.label}<span className="pfeil" aria-hidden="true">{aktiv ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
         </button>
       </th>
@@ -130,6 +133,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
     const pz = meinePendel(r);
     return (
       <>
+        {(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <span className="chip neutral" style={{ color: AMPEL_FARBE[a.stufe], fontWeight: 700 }} title={a.gruende.join(' · ')}><span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe] }} />{AMPEL_LABEL[a.stufe]}</span>; })()}
         {neuFuerMich(r) ? <span className="chip accent">💬 neu für dich</span> : null}
         <span className={'chip ' + (r.tage_am_markt > 90 ? 'warm' : 'neutral')} title="Tage am Markt">{r.tage_am_markt} Tage</span>
         {t !== null && t.quote !== null ? <span className="chip neutral" style={{ color: stufeFarbe(t.stufe), fontWeight: 700 }} title="Tragbarkeit">{t.ekZuTief ? 'EK zu tief' : 'Tragbarkeit ' + quoteText(t)}</span> : null}
@@ -156,7 +160,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
       <div className="mob sort-mob">
         <label htmlFor="sort-mob" className="small muted">Sortieren</label>
         <select id="sort-mob" className="select" value={sort.key} onChange={(e) => klick(e.target.value)}>
-          {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Bewertung ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.key === 'budget' ? 'Budget-Überschuss' : s.label}</option>)}
+          {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Bewertung ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.key === 'budget' ? 'Budget-Überschuss' : s.key === 'ampel' ? 'Einschätzung' : s.label}</option>)}
         </select>
         <button type="button" className="btn sm" onClick={() => setSort({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })} aria-label={sort.dir === 'asc' ? 'Aufsteigend, umkehren' : 'Absteigend, umkehren'}>
           {sort.dir === 'asc' ? '▲ auf' : '▼ ab'}
@@ -208,8 +212,9 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
               const sub = [typLabel(r.typ), r.adresse].filter((x) => x !== null && x !== '').join(' · ');
               return (
                 <tr key={r.id} className={r.stufe_phase === 9 ? 'aus' : undefined}>
+                  <td className="ampel-zelle">{(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe], marginRight: 0 }} title={AMPEL_LABEL[a.stufe] + ': ' + a.gruende.join(' · ')} aria-label={AMPEL_LABEL[a.stufe]} />; })()}</td>
                   <td>
-                    <Link to={'/inserate/' + r.id} className="obj" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    <Link to={'/inserate/' + r.id} className="obj" style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                       <ObjektBild o={r} className="thumb" />
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                         <span style={{ fontWeight: 600 }}>{r.ort}{r.titel ? ' · ' + r.titel : ''}</span>
@@ -231,7 +236,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                   <td className="r tnum">{(() => { const pz = meinePendel(r); return pz !== null ? <span title={'ab ' + (pz.von || '') + ' nach ' + (pz.nach || '')}>{pz.minuten}'</span> : <span className="muted">–</span>; })()}</td>
                   <td className="r tnum">{(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten); return b.vollstaendig ? <span style={{ color: ueberschussFarbe(b), fontWeight: 600 }} title={'Einkommen ' + chf(b.einkommen) + ' − Wohnen ' + chf(b.wohnen.total) + ' − Ausgaben ' + chf(b.ausgabenTotal)}>{b.ueberschuss < 0 ? '−' : ''}{chf(Math.abs(b.ueberschuss))}</span> : <span className="muted">–</span>; })()}</td>
                   <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 170 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 130 }}>
                       <span className="small" style={{ fontWeight: 500 }}>{r.stufe_name}{neuFuerMich(r) ? <span className="chip accent" style={{ marginLeft: 6 }}>💬 neu</span> : null}</span>
                       <div className="progress" aria-label={'Phase ' + phase + ' von 5'}>
                         {[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= phase ? 'on' : ''} />)}
@@ -244,7 +249,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                     return <td key={p.id}><StarsText n={b ? b.sterne : 0} color={p.farbe} /></td>;
                   })}
                   <td className={'r tnum' + (r.tage_am_markt > 90 ? '' : ' muted')} style={r.tage_am_markt > 90 ? { color: 'var(--warm-dark)', fontWeight: 600 } : undefined}>{r.tage_am_markt}</td>
-                  <td className="muted small">{dateShort(r.erstmals_gesehen)}</td>
+                  <td className="muted small nur-breit">{dateShort(r.erstmals_gesehen)}</td>
                 </tr>
               );
             })}

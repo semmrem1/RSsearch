@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { Haushalt, ObjektUebersicht } from './types';
+import type { BudgetPosten, Haushalt, ObjektUebersicht, Profile } from './types';
 import { tragbarkeit } from './finanz';
+import { ampel, uneinig, type AmpelStufe } from './ampel';
 
 export interface ObjektFilter {
   q: string;
@@ -12,19 +13,14 @@ export interface ObjektFilter {
   pendelMax: number | null; // Minuten, bezogen auf die eingeloggte Person
   nurTragbar: boolean;
   nurUneinig: boolean;
+  ampel: 'alle' | AmpelStufe;
 }
 
-export const FILTER_STANDARD: ObjektFilter = { q: '', orte: [], markt: 'alle', phase: 'alle', fav: 'alle', ausgeschieden: true, pendelMax: null, nurTragbar: false, nurUneinig: false };
+export const FILTER_STANDARD: ObjektFilter = { q: '', orte: [], markt: 'alle', phase: 'alle', fav: 'alle', ausgeschieden: true, pendelMax: null, nurTragbar: false, nurUneinig: false, ampel: 'alle' };
 
-export interface FilterKontext { me: string | null; haushalt: Haushalt }
+export interface FilterKontext { me: string | null; haushalt: Haushalt; profiles?: Profile[]; posten?: BudgetPosten[] }
 
-/** Beide haben bewertet und liegen deutlich auseinander (Score >= 1.5 oder Sterne >= 2). */
-export function uneinig(o: ObjektUebersicht): boolean {
-  const scores = Object.values(o.kriterien_scores).map(Number);
-  if (scores.length >= 2 && Math.max(...scores) - Math.min(...scores) >= 1.5) { return true; }
-  const sterne = Object.values(o.bewertungen).map((b) => b.sterne).filter((s) => s > 0);
-  return sterne.length >= 2 && Math.max(...sterne) - Math.min(...sterne) >= 2;
-}
+export { uneinig } from './ampel';
 
 function lesen(key: string, standard: ObjektFilter): ObjektFilter {
   try {
@@ -48,7 +44,7 @@ export function useObjektFilter(key: string, standard: ObjektFilter = FILTER_STA
 }
 
 export function filterAktiv(f: ObjektFilter, standard: ObjektFilter = FILTER_STANDARD): boolean {
-  return f.q.trim() !== '' || f.orte.length > 0 || f.markt !== standard.markt || f.phase !== standard.phase || f.fav !== standard.fav || f.ausgeschieden !== standard.ausgeschieden || f.pendelMax !== null || f.nurTragbar || f.nurUneinig;
+  return f.q.trim() !== '' || f.orte.length > 0 || f.markt !== standard.markt || f.phase !== standard.phase || f.fav !== standard.fav || f.ausgeschieden !== standard.ausgeschieden || f.pendelMax !== null || f.nurTragbar || f.nurUneinig || f.ampel !== 'alle';
 }
 
 export function filtern(objekte: ObjektUebersicht[], f: ObjektFilter, ctx?: FilterKontext): ObjektUebersicht[] {
@@ -63,6 +59,7 @@ export function filtern(objekte: ObjektUebersicht[], f: ObjektFilter, ctx?: Filt
       if (t === null || t.stufe === 'nein') { return false; }
     }
     if (f.nurUneinig && !uneinig(o)) { return false; }
+    if (f.ampel !== 'alle' && ctx !== undefined && ampel(o, ctx.haushalt, ctx.profiles || [], ctx.posten || []).stufe !== f.ampel) { return false; }
     if (!f.ausgeschieden && o.stufe_phase === 9) { return false; }
     if (f.orte.length > 0 && f.orte.indexOf(o.ort) === -1) { return false; }
     if (f.markt !== 'alle' && o.markt_status !== f.markt) { return false; }

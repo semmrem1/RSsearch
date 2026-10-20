@@ -182,6 +182,7 @@ export default function Einstellungen() {
               <Zahl id="amort" label="Amortisation" einheit="Jahre" wert={h.amortisation_jahre} onChange={(v) => setH({ ...h, amortisation_jahre: v !== null ? Math.round(v) : 15 })} />
               <Zahl id="bel" label="Max. Belehnung" einheit="%" wert={h.belehnung_max} onChange={(v) => setH({ ...h, belehnung_max: v !== null ? v : 80 })} />
               <Zahl id="trag" label="Max. Tragbarkeit" einheit="%" wert={h.tragbarkeit_max} onChange={(v) => setH({ ...h, tragbarkeit_max: v !== null ? v : 33 })} />
+              <Zahl id="kaufnk" label="Kaufnebenkosten" einheit="% des Preises" wert={h.kaufnebenkosten_pct} onChange={(v) => setH({ ...h, kaufnebenkosten_pct: v !== null ? v : 1.5 })} hinweis="Notar, Grundbuch, Handänderungssteuer; je nach Kanton ca. 0.5 bis 2 %" />
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
               <button type="button" className="btn primary" onClick={haushaltSpeichern}>Speichern</button>

@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { budget, ueberschussFarbe } from '../lib/budget';
 import { chf } from '../lib/format';
@@ -21,28 +20,12 @@ function Betrag({ wert, onChange, breit, aria }: { wert: number; onChange: (v: n
 }
 
 /** Monatsbudget pro Objekt: Standardwerte aus den Einstellungen, Überschreibungen in objekt_budget. */
-export default function BudgetKarte({ objektId, preis }: { objektId: string; preis: number | null }) {
+export default function BudgetKarte({ preis, daten, speichern }: { preis: number | null; daten: ObjektBudgetDaten | null; speichern: (d: ObjektBudgetDaten) => void }) {
   const { haushalt, profiles, budgetPosten } = useApp();
-  const [daten, setDaten] = useState<ObjektBudgetDaten | null>(null);
-  const [geladen, setGeladen] = useState(false);
   const [extraName, setExtraName] = useState('');
   const [extraBetrag, setExtraBetrag] = useState('');
-  const timer = useRef<number | null>(null);
 
-  useEffect(() => {
-    supabase.from('objekt_budget').select('daten').eq('objekt_id', objektId).maybeSingle()
-      .then(({ data }) => { setDaten(data !== null ? (data as { daten: ObjektBudgetDaten }).daten : {}); setGeladen(true); });
-  }, [objektId]);
-
-  function speichern(neu: ObjektBudgetDaten) {
-    setDaten(neu);
-    if (timer.current !== null) { window.clearTimeout(timer.current); }
-    timer.current = window.setTimeout(() => {
-      supabase.from('objekt_budget').upsert({ objekt_id: objektId, daten: neu, updated_at: new Date().toISOString() }).then(() => undefined);
-    }, 400);
-  }
-
-  if (!geladen || daten === null) { return <div className="small muted">Lade Budget …</div>; }
+  if (daten === null) { return <div className="small muted">Lade Budget …</div>; }
   const b = budget(preis, haushalt, profiles, budgetPosten, daten);
   const ov = daten;
   const istStandard = Object.keys(ov).length === 0;
@@ -101,7 +84,7 @@ export default function BudgetKarte({ objektId, preis }: { objektId: string; pre
 
       <div className="budget-block">
         <div className="budget-kopf"><span>Wohnkosten dieses Objekts</span><span className="tnum">− CHF {chf(b.wohnen.total)}</span></div>
-        <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)}</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
+        <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)} · Zins oben bei «Finanzierung» anpassbar</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
         <div className="budget-zeile"><span>Nebenkosten, Unterhalt <span className="xs muted">{haushalt.nebenkosten_pct} % vom Preis</span></span><span /><span className="tnum">{chf(b.wohnen.nebenkosten)}</span></div>
         <div className="budget-zeile"><span>Amortisation 2. Hypothek <span className="xs muted">auf 65 % in {haushalt.amortisation_jahre} Jahren</span></span><span /><span className="tnum">{chf(b.wohnen.amortisation)}</span></div>
       </div>

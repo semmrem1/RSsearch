@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
@@ -12,15 +12,20 @@ import KriterienGrid from '../components/KriterienGrid';
 import Galerie from '../components/Galerie';
 import ZusammenfuehrenModal from '../components/ZusammenfuehrenModal';
 import BudgetKarte from '../components/BudgetKarte';
+import { useObjektBudget } from '../hooks/useObjektBudget';
+import { budget, ueberschussFarbe } from '../lib/budget';
+import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
+import FinanzierungKarte from '../components/FinanzierungKarte';
 import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
-import type { ExposeExtrakt, Gemeinde } from '../lib/types';
+import type { ExposeExtrakt, Gemeinde, ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Bewertung, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
 
 export default function Detail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { me, profiles, stufen, stufeByCode, haushalt } = useApp();
+  const { me, profiles, stufen, stufeByCode, haushalt, budgetPosten } = useApp();
+  const { daten: budgetDaten, speichern: budgetSpeichern } = useObjektBudget(id);
   const [o, setO] = useState<Objekt | null>(null);
   const [quellen, setQuellen] = useState<Quelle[]>([]);
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
@@ -48,6 +53,7 @@ export default function Detail() {
   const [zfOffen, setZfOffen] = useState(false);
   const [galerieVersion] = useState(0);
   const [hinweis, setHinweis] = useState<string | null>(null);
+  const [ue, setUe] = useState<ObjektUebersicht | null>(null);
   const [bildLaedt, setBildLaedt] = useState(false);
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
 
@@ -72,10 +78,12 @@ export default function Detail() {
     setLoc((g.data || []) as Standortfaktor[]);
     const obj = a.data as Objekt;
     if (obj.zusammengefuehrt_in) { return; }
-    const [ex, gm] = await Promise.all([
+    const [ex, gm, uv] = await Promise.all([
       supabase.from('expose_extrakte').select('*').eq('objekt_id', id).order('erstellt_am', { ascending: false }),
       supabase.from('ortschaften').select('gemeinde').eq('ort', obj.ort).maybeSingle(),
+      supabase.from('v_objekte_uebersicht').select('*').eq('id', id).maybeSingle(),
     ]);
+    setUe(uv.data !== null ? (uv.data as ObjektUebersicht) : null);
     setExtrakte((ex.data || []) as ExposeExtrakt[]);
     const gName = gm.data !== null ? (gm.data as { gemeinde: string }).gemeinde : obj.ort;
     const g2 = await supabase.from('gemeinden').select('*').eq('name', gName).maybeSingle();
@@ -227,14 +235,6 @@ export default function Detail() {
   const genauText = o.geo_genauigkeit === 'adresse' ? 'Position aus Adresse' : o.geo_genauigkeit === 'manuell' ? 'Position manuell gesetzt' : o.geo_genauigkeit === 'ort' ? 'Nur Ort bekannt, Position ungefähr' : '';
   const geoAdminLink = o.lat !== null && o.lng !== null ? 'https://map.geo.admin.ch/#/map?lang=de&center=' + o.lng.toFixed(6) + ',' + o.lat.toFixed(6) + '&z=12&crosshair=marker&bgLayer=ch.swisstopo.swissimage&swisssearch=' + encodeURIComponent((o.adresse || '') + ' ' + o.ort) : null;
 
-  const facts = [
-    { k: 'Preis', v: chf(o.preis_chf, true), sub: lastPriceChange ? 'geändert ' + dateShort(lastPriceChange.datum) : 'unverändert seit Erfassung' },
-    { k: 'Preis pro m²', v: o.preis_chf !== null && o.flaeche_m2 ? 'CHF ' + chf(o.preis_chf / o.flaeche_m2) : '–', sub: '' },
-    { k: 'Zimmer', v: o.zimmer !== null ? String(o.zimmer) : '–', sub: typLabel(o.typ) },
-    { k: 'Wohnfläche', v: o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : '–', sub: o.grundstueck_m2 !== null ? 'Grundstück ' + o.grundstueck_m2 + ' m²' : '' },
-    { k: 'Baujahr', v: o.baujahr !== null ? String(o.baujahr) : '–', sub: '' },
-    { k: 'Gesehen', v: dateShort(o.erstmals_gesehen), sub: 'zuletzt ' + dateShort(o.zuletzt_gesehen) },
-  ];
 
   return (
     <>
@@ -271,59 +271,54 @@ export default function Detail() {
         </div>
       ) : null}
 
-      <section className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }} aria-label="Eckdaten">
-        {facts.map((f) => (
-          <div key={f.k} className="kpi" style={{ padding: '14px 16px', gap: 4 }}>
-            <span className="xs muted">{f.k}</span>
-            <span className="tnum" style={{ fontSize: 20, fontWeight: 700 }}>{f.v}</span>
-            <span className="xs muted">{f.sub}</span>
-          </div>
-        ))}
-      </section>
-
       {(() => {
-        const t = tragbarkeit(o.preis_chf, haushalt);
-        const eingerichtet = haushalt.eigenkapital !== null && haushalt.einkommen_jahr !== null;
+        const zEff = budgetDaten !== null && budgetDaten.zins_effektiv !== undefined ? Number(budgetDaten.zins_effektiv) : Number(haushalt.zins_effektiv);
+        const t = tragbarkeit(o.preis_chf, haushalt, zEff);
+        const b = budget(o.preis_chf, haushalt, profiles, budgetPosten, budgetDaten);
+        const amp = ue !== null ? ampel(ue, haushalt, profiles, budgetPosten) : null;
+        const pz = ue !== null ? ue.pendelzeiten : {};
+        const kpi = (k: string, v: ReactNode, sub?: ReactNode, farbe?: string) => (
+          <div key={k} className="kpi ek">
+            <span className="xs muted">{k}</span>
+            <span className="tnum ek-wert" style={farbe ? { color: farbe } : undefined}>{v}</span>
+            {sub !== undefined ? <span className="xs muted ek-sub">{sub}</span> : null}
+          </div>
+        );
         return (
-          <section className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }} aria-label="Finanzierung und Gemeinde">
-            <div className="kpi" style={{ padding: '14px 16px', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span className="xs muted">Tragbarkeit</span>
-                <Link to="/einstellungen" className="xs">Haushalt anpassen</Link>
+          <section className="ek-strip" aria-label="Entscheid auf einen Blick">
+            {amp !== null ? (
+              <div className="kpi ek ek-ampel" style={{ borderColor: AMPEL_FARBE[amp.stufe] }} title={amp.gruende.join(' · ')}>
+                <span className="xs muted">Einschätzung</span>
+                <span className="ek-wert" style={{ color: AMPEL_FARBE[amp.stufe] }}><span className="ampel-dot" style={{ background: AMPEL_FARBE[amp.stufe] }} />{AMPEL_LABEL[amp.stufe]}</span>
+                <span className="xs muted ek-sub">{amp.gruende.slice(0, 2).join(' · ')}</span>
               </div>
-              {t === null ? <span className="muted small">Kein Preis</span> : !eingerichtet ? (
-                <span className="small muted">Eigenkapital und Einkommen unter <Link to="/einstellungen">Einstellungen</Link> hinterlegen, dann rechnet die App pro Objekt.</span>
-              ) : (
-                <>
-                  <span className="tnum" style={{ fontSize: 22, fontWeight: 700, color: stufeFarbe(t.stufe) }}>{t.ekZuTief ? 'Eigenkapital zu tief' : quoteText(t)}<span className="xs muted" style={{ fontWeight: 400, marginLeft: 8 }}>{t.stufe === 'ok' ? 'tragbar' : t.stufe === 'knapp' ? 'knapp' : 'nicht tragbar'}</span></span>
-                  <div className="xs muted tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
-                    <span>Hypothek</span><span style={{ textAlign: 'right' }}>CHF {chf(t.hypothek)} ({(t.belehnung * 100).toFixed(0)} % Belehnung)</span>
-                    <span>Zins {haushalt.zins_kalk} % kalk.</span><span style={{ textAlign: 'right' }}>CHF {chf(t.zinsen)}</span>
-                    <span>Nebenkosten {haushalt.nebenkosten_pct} %</span><span style={{ textAlign: 'right' }}>CHF {chf(t.nebenkosten)}</span>
-                    <span>Amortisation</span><span style={{ textAlign: 'right' }}>CHF {chf(t.amortisation)}</span>
-                    <span style={{ fontWeight: 600 }}>Kosten pro Jahr</span><span style={{ textAlign: 'right', fontWeight: 600 }}>CHF {chf(t.kosten)} · {chf(t.kosten / 12)}/Mt</span>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="kpi" style={{ padding: '14px 16px', gap: 6 }}>
-              <span className="xs muted">Gemeinde &amp; Steuern</span>
-              {gemeinde === null ? <span className="small muted">Keine Gemeindedaten für «{o.ort}». Unter Einstellungen pflegen.</span> : (
-                <>
-                  <span style={{ fontSize: 18, fontWeight: 700 }}>{gemeinde.name} <span className="xs muted" style={{ fontWeight: 400 }}>{gemeinde.kanton}</span></span>
-                  <div className="xs muted tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
-                    <span>Steuerfuss {gemeinde.steuerfuss_jahr || ''}</span><span style={{ textAlign: 'right', fontWeight: 600, color: 'var(--ink)' }}>{gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–'}</span>
-                    {gemeinde.steuerfuss_hinweis ? <><span /><span style={{ textAlign: 'right' }}>{gemeinde.steuerfuss_hinweis}</span></> : null}
-                    {gemeinde.steuer_index !== null ? <><span>Index</span><span style={{ textAlign: 'right' }}>{gemeinde.steuer_index}{gemeinde.steuer_index_hinweis ? ' (' + gemeinde.steuer_index_hinweis + ')' : ''}</span></> : null}
-                    {gemeinde.steuer_beispiel_chf !== null ? <><span>Beispiel</span><span style={{ textAlign: 'right' }}>CHF {chf(gemeinde.steuer_beispiel_chf)}/Jahr{gemeinde.steuer_beispiel_hinweis ? ' · ' + gemeinde.steuer_beispiel_hinweis : ''}</span></> : null}
-                  </div>
-                  <span className="xs">{gemeinde.quelle_url ? <a href={gemeinde.quelle_url} target="_blank" rel="noopener noreferrer">Quelle ↗</a> : null} <span className="muted">· Steuerfüsse sind nur innerhalb eines Kantons vergleichbar</span></span>
-                </>
-              )}
-            </div>
+            ) : null}
+            {kpi('Preis', chf(o.preis_chf, true), o.preis_chf !== null && o.flaeche_m2 ? 'CHF ' + chf(o.preis_chf / o.flaeche_m2) + '/m²' + (lastPriceChange ? ' · geändert ' + dateShort(lastPriceChange.datum) : '') : (lastPriceChange ? 'geändert ' + dateShort(lastPriceChange.datum) : 'unverändert'))}
+            {kpi('Objekt', (o.zimmer !== null ? o.zimmer + ' Zi' : '–') + ' · ' + (o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : '–'), typLabel(o.typ) + (o.baujahr !== null ? ' · Baujahr ' + o.baujahr : '') + (o.grundstueck_m2 !== null ? ' · ' + o.grundstueck_m2 + ' m² Land' : ''))}
+            {kpi('Am Markt', (ue !== null ? ue.tage_am_markt : 0) + ' Tage', 'seit ' + dateShort(o.erstmals_gesehen) + ' · zuletzt ' + dateShort(o.zuletzt_gesehen), ue !== null && ue.tage_am_markt > 90 ? 'var(--warm-dark)' : undefined)}
+            {kpi('Tragbarkeit Bank', t !== null && (t.bank.quote !== null || t.ekZuTief) ? (t.ekZuTief ? 'EK zu tief' : quoteText(t.bank)) : '–', 'kalk. ' + haushalt.zins_kalk + ' % · max. ' + haushalt.tragbarkeit_max + ' %', t !== null ? stufeFarbe(t.bank.stufe) : undefined)}
+            {kpi('Belastung pro Monat', t !== null && haushalt.eigenkapital !== null ? 'CHF ' + chf(t.effektiv.kosten / 12) : '–', 'Zins ' + zEff + ' % effektiv · Hypothek ' + (t !== null ? chf(t.hypothek) : '–'))}
+            {kpi('Budget', b.vollstaendig ? (b.ueberschuss < 0 ? '−' : '+') + 'CHF ' + chf(Math.abs(b.ueberschuss)) + '/Mt' : '–', b.vollstaendig && b.sparquote !== null ? (b.sparquote * 100).toFixed(0) + ' % Sparquote' : 'Nettolohn in Einstellungen', b.vollstaendig ? ueberschussFarbe(b) : undefined)}
+            {kpi('Pendeln ÖV', profiles.map((p) => p.kuerzel + ' ' + (pz[p.id] ? pz[p.id].minuten + "'" : '–')).join(' · '), profiles.map((p) => (pz[p.id] && pz[p.id].nach ? p.kuerzel + ' → ' + pz[p.id].nach : null)).filter((x) => x !== null).join(' · ') || 'Arbeitsort in Einstellungen')}
+            {kpi('Score', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · '))}
+            {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') : o.ort)}
           </section>
         );
       })()}
+
+      <div className="entscheid-grid">
+        <section className="card pad" aria-labelledby="fin-h">
+          <FinanzierungKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} />
+        </section>
+        <section className="card pad" aria-labelledby="budget-h">
+          <div className="card-head"><h2 id="budget-h">Budget pro Monat</h2><span className="xs muted">Einkommen nach Pensum, Wohnkosten, Ausgaben</span></div>
+          <BudgetKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} />
+        </section>
+        <section className="card pad" aria-labelledby="krit-h">
+          <div className="card-head"><h2 id="krit-h">Kriterien</h2><span className="xs muted">1 schlecht · 5 sehr gut</span></div>
+          <KriterienGrid objektId={o.id} onChange={() => load()} />
+        </section>
+      </div>
 
       <section className="card" aria-labelledby="lage-h">
         <h2 id="lage-h" className="sr-only">Bild und Lage</h2>
@@ -347,11 +342,6 @@ export default function Detail() {
 
       <div className="two-col">
         <div className="main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-          <section className="card pad" aria-labelledby="budget-h">
-            <div className="card-head"><h2 id="budget-h">Budget pro Monat</h2><span className="small muted">Einkommen nach Pensum, Wohnkosten dieses Objekts, Ausgaben</span></div>
-            <BudgetKarte objektId={o.id} preis={o.preis_chf} />
-          </section>
 
           <section className="card pad" aria-labelledby="price-h">
             <div className="card-head"><h2 id="price-h">Preis- und Inseratsverlauf</h2><span className="small muted">Jede Änderung, die der tägliche Lauf erkennt</span></div>
@@ -424,11 +414,6 @@ export default function Detail() {
         </div>
 
         <aside className="side">
-          <section className="card pad" aria-labelledby="krit-h">
-            <div className="card-head"><h2 id="krit-h">Kriterien</h2><span className="xs muted">1 schlecht · 5 sehr gut</span></div>
-            <KriterienGrid objektId={o.id} />
-          </section>
-
           <section className="card pad" aria-labelledby="rate-h">
             <h2 id="rate-h">Bewertung pro Person</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
@@ -466,6 +451,20 @@ export default function Detail() {
                 </div>
               </div>
             ) : null}
+          </section>
+
+          <section className="card pad" aria-labelledby="gem-h">
+            <h2 id="gem-h">Gemeinde &amp; Steuern</h2>
+            {gemeinde === null ? <div className="small muted" style={{ marginTop: 8 }}>Keine Gemeindedaten für «{o.ort}». Unter Einstellungen pflegen.</div> : (
+              <div className="xs tnum" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', marginTop: 10 }}>
+                <span className="muted">Gemeinde</span><span style={{ textAlign: 'right', fontWeight: 600 }}>{gemeinde.name} {gemeinde.kanton}</span>
+                <span className="muted">Steuerfuss {gemeinde.steuerfuss_jahr || ''}</span><span style={{ textAlign: 'right', fontWeight: 600 }}>{gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–'}</span>
+                {gemeinde.steuerfuss_hinweis ? <><span /><span style={{ textAlign: 'right' }} className="muted">{gemeinde.steuerfuss_hinweis}</span></> : null}
+                {gemeinde.steuer_index !== null ? <><span className="muted">Index</span><span style={{ textAlign: 'right' }}>{gemeinde.steuer_index}</span></> : null}
+                <span className="muted">Quelle</span><span style={{ textAlign: 'right' }}>{gemeinde.quelle_url ? <a href={gemeinde.quelle_url} target="_blank" rel="noopener noreferrer">öffnen ↗</a> : '–'}</span>
+              </div>
+            )}
+            <span className="xs muted" style={{ display: 'block', marginTop: 8 }}>Steuerfüsse sind nur innerhalb eines Kantons vergleichbar.</span>
           </section>
 
           <section className="card pad" aria-labelledby="src-h">

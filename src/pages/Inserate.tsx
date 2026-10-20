@@ -9,12 +9,12 @@ import FilterBar from '../components/FilterBar';
 import { filtern, useObjektFilter } from '../lib/filter';
 
 export default function Inserate() {
-  const { me, haushalt } = useApp();
+  const { me, haushalt, profiles, budgetPosten } = useApp();
   const { objekte, loading, reload, offlineStand } = useObjekte();
   const [filter, setFilter] = useObjektFilter('inserate');
   const [showForm, setShowForm] = useState(false);
   const nav = useNavigate();
-  const rows = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
+  const rows = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt, profiles, posten: budgetPosten });
 
   return (
     <>

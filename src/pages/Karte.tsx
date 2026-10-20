@@ -9,12 +9,12 @@ import { phasenFarbe, zuKartenpunkt } from '../lib/kartenpunkte';
 import type { KartenPunkt } from '../components/Karte';
 
 export default function KartePage() {
-  const { me, haushalt } = useApp();
+  const { me, haushalt, profiles, budgetPosten } = useApp();
   const { objekte, loading, geoOffen, offlineStand } = useObjekte();
   const [filter, setFilter] = useObjektFilter('karte');
   const nav = useNavigate();
 
-  const sichtbar = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
+  const sichtbar = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt, profiles, posten: budgetPosten });
 
   const punkte: KartenPunkt[] = [];
   sichtbar.forEach((o) => { const p = zuKartenpunkt(o); if (p !== null) { punkte.push(p); } });

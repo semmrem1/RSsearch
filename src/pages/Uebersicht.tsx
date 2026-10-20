@@ -14,7 +14,7 @@ import type { Aktivitaet, Snapshot } from '../lib/types';
 interface FeedItem { key: string; when: string; kind: string; cls: string; title: string; detail: string; objektId: string }
 
 export default function Uebersicht() {
-  const { profiles, me, haushalt } = useApp();
+  const { profiles, me, haushalt, budgetPosten } = useApp();
   const { objekte, loading, reload, offlineStand } = useObjekte();
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
   const [todos, setTodos] = useState<Aktivitaet[]>([]);
@@ -67,7 +67,7 @@ export default function Uebersicht() {
       return { key: 'snap' + s.id, when: relative(s.datum) === 'heute' ? new Date(s.datum).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : dateShort(s.datum), kind, cls, title: name, detail, objektId: s.objekt_id };
     });
 
-  const filtered = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt });
+  const filtered = filtern(objekte, filter, { me: me !== null ? me.id : null, haushalt, profiles, posten: budgetPosten });
   const uneinige = objekte.filter((o) => o.stufe_phase !== 9 && uneinig(o));
 
   return (

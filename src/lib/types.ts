@@ -25,6 +25,7 @@ export interface Haushalt {
   tragbarkeit_max: number;
   zins_effektiv: number;
   weitere_einkuenfte_monat: number;
+  kaufnebenkosten_pct: number;
 }
 
 export interface BudgetPosten { id: string; name: string; betrag_monat: number; kategorie: 'fix' | 'variabel' | 'sparen'; sort: number }
