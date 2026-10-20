@@ -54,7 +54,7 @@ export default function Detail() {
     if (!id) { return; }
     const [a, b, c, d, e, f, g] = await Promise.all([
       supabase.from('objekte').select('*').eq('id', id).maybeSingle(),
-      supabase.from('objekt_quellen').select('*').eq('objekt_id', id).order('erstmals_gesehen'),
+      supabase.from('objekt_quellen').select('*').eq('objekt_id', id).order('spiegel_von', { nullsFirst: true }).order('erstmals_gesehen'),
       supabase.from('snapshots').select('*').eq('objekt_id', id).order('datum', { ascending: false }),
       supabase.from('aktivitaeten').select('*').eq('objekt_id', id).order('datum', { ascending: false }),
       supabase.from('bewertungen').select('*').eq('objekt_id', id),
