@@ -144,6 +144,7 @@ declare
   jahr int := extract(year from current_date)::int;
   st_min numeric; st_max numeric; st_dies numeric;
   pz_avg numeric; pz_n int;
+  neg_n int; neg_wer text;
   pts numeric; total numeric := 0; maxsum numeric := 0; cap numeric := 100; faktor numeric := 1; v_kanton text;
 begin
   select * into h from public.haushalt where id = 1;
@@ -332,6 +333,11 @@ begin
   if o.markt_status in ('verkauft', 'offline') then faktor := 0; hinweise := array_append(hinweise, 'Objekt ist ' || case when o.markt_status = 'verkauft' then 'verkauft' else 'nicht mehr online' end || ': Score 0');
   elsif o.markt_status = 'reserviert' then faktor := 0.5; hinweise := array_append(hinweise, 'beim Makler reserviert: Score halbiert'); end if;
   if o.zusammengefuehrt_in is not null then faktor := 0; hinweise := array_append(hinweise, 'in ein anderes Objekt zusammengeführt'); end if;
+  -- Persönliches Veto: 1 bis 2 Sterne und «uninteressant» von einer Person halbiert den Score, von beiden auf 20 %
+  select count(*), string_agg(pr.kuerzel, ', ') into neg_n, neg_wer from public.bewertungen b join public.profiles pr on pr.id = b.user_id and pr.rolle <> 'leser'
+   where b.objekt_id = o.id and b.uninteressant and b.sterne between 1 and 2;
+  if neg_n >= 2 then faktor := faktor * 0.2; hinweise := array_append(hinweise, 'von ' || neg_wer || ' mit 1 bis 2 Sternen bewertet und als uninteressant markiert: Score auf 20 % reduziert');
+  elsif neg_n = 1 then faktor := faktor * 0.5; hinweise := array_append(hinweise, 'von ' || neg_wer || ' mit 1 bis 2 Sternen bewertet und als uninteressant markiert: Score halbiert'); end if;
   if cap < 100 then hinweise := array_append(hinweise, 'Obergrenze ' || cap || ' wegen Eigenkapital, Tragbarkeit oder Budget'); end if;
 
   total := round(least(cap, total) * faktor);
@@ -405,6 +411,7 @@ create or replace trigger budget_posten_scores after insert or update or delete 
 create or replace trigger gemeinden_scores after insert or update on public.gemeinden for each statement execute function public.scores_nachrechnen_alle();
 create or replace trigger objekt_budget_scores after insert or update on public.objekt_budget for each row execute function public.scores_nachrechnen_objekt();
 create or replace trigger pendelzeiten_scores after insert or update on public.pendelzeiten for each row execute function public.scores_nachrechnen_objekt();
+create or replace trigger bewertungen_scores after insert or update or delete on public.bewertungen for each row execute function public.scores_nachrechnen_objekt();
 
 -- Täglich 05:45 (nach Mitternacht ändern sich Vergleichswerte und Marktstatus)
 do $$
@@ -480,3 +487,8 @@ left join public.gemeinden g on g.name = coalesce(ol.gemeinde, o.ort);
 
 -- Bestand einmalig rechnen
 select public.scores_berechnen();
+
+-- Einmalig (21.10.2026): alle bestehenden Inserate für beide Mitglieder als gelesen markieren; nur neue starten «ungelesen»
+insert into public.objekt_besuche (objekt_id, user_id, zuletzt)
+select o.id, p.id, now() from public.objekte o cross join public.profiles p where p.rolle <> 'leser'
+on conflict (objekt_id, user_id) do nothing;
