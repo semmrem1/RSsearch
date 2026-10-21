@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { chf, dateLong, dateShort } from '../lib/format';
+import TeilenButton from '../components/TeilenButton';
 import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauEreignis, NeubauPhase, Neubauprojekt, RadarGemeinde } from '../lib/types';
 
 type Tab = 'projekte' | 'baugesuche' | 'gemeinden';
@@ -138,8 +139,8 @@ function ProjektModal({ start, gemeinden, onClose, onSaved }: { start: Partial<N
 }
 
 // ---------- Projektkarte ----------
-function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, onEdit, onPhase, onInteressent }: {
-  p: Neubauprojekt; gesuche: Baugesuch[]; ereignisse: NeubauEreignis[]; inserate: ProjektInserat[]; leser: boolean;
+function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, onEdit, onPhase, onInteressent }: {
+  p: Neubauprojekt; gesuche: Baugesuch[]; ereignisse: NeubauEreignis[]; inserate: ProjektInserat[]; leser: boolean; hervorgehoben: boolean;
   onEdit: () => void; onPhase: (ph: NeubauPhase) => void; onInteressent: () => void;
 }) {
   const [offen, setOffen] = useState(false);
@@ -147,8 +148,13 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, onEdit, onPhase
   const flaeche = spanne(p.flaeche_von, p.flaeche_bis, (n) => String(n));
   const preis = p.preis_ab !== null ? (p.preis_bis !== null && p.preis_bis !== p.preis_ab ? chf(p.preis_ab, true) + ' – ' + chf(p.preis_bis) : 'ab ' + chf(p.preis_ab, true)) : null;
   const imBudget = p.preis_ab !== null && p.preis_ab <= BUDGET;
+  const teilenInhalt = {
+    titel: 'Neubauprojekt ' + p.name,
+    text: [p.gemeinde, p.typ, preis, p.bezug ? 'Bezug ' + p.bezug : null].filter(Boolean).join(' · '),
+    pfad: '/radar?projekt=' + p.id,
+  };
   return (
-    <article className="card radar-projekt">
+    <article id={'projekt-' + p.id} className={'card radar-projekt' + (hervorgehoben ? ' geteilt' : '')}>
       <div className="radar-projekt-kopf">
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -159,7 +165,10 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, onEdit, onPhase
           <h3 className="radar-projekt-name">{p.name}</h3>
           <div className="muted small">{[p.gemeinde, p.adresse].filter(Boolean).join(' · ')}</div>
         </div>
-        {p.website ? <a className="btn sm" href={p.website} target="_blank" rel="noreferrer">Website</a> : null}
+        <div className="radar-aktionen" style={{ flexShrink: 0 }}>
+          {p.website ? <a className="btn sm" href={p.website} target="_blank" rel="noreferrer">Website</a> : null}
+          <TeilenButton className="btn sm" nurIcon inhalt={teilenInhalt} />
+        </div>
       </div>
       <dl className="radar-fakten">
         {p.typ ? <div><dt>Typ</dt><dd>{p.typ}{p.einheiten !== null ? ', ' + p.einheiten + ' Einheiten' : ''}</dd></div> : null}
@@ -215,7 +224,15 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, onEdit, onPhase
 // ---------- Seite ----------
 export default function Radar() {
   const { leser } = useApp();
-  const [tab, setTab] = useState<Tab>(() => { try { const t = localStorage.getItem('radar-tab'); return t === 'baugesuche' || t === 'gemeinden' ? t : 'projekte'; } catch { return 'projekte'; } });
+  const [params, setParams] = useSearchParams();
+  // Geteilte Links: /radar?projekt=<id> oder /radar?gesuch=<id>
+  const geteiltProjekt = params.get('projekt');
+  const geteiltGesuch = params.get('gesuch');
+  const [tab, setTab] = useState<Tab>(() => {
+    if (geteiltProjekt !== null) { return 'projekte'; }
+    if (geteiltGesuch !== null) { return 'baugesuche'; }
+    try { const t = localStorage.getItem('radar-tab'); return t === 'baugesuche' || t === 'gemeinden' ? t : 'projekte'; } catch { return 'projekte'; }
+  });
   const [projekte, setProjekte] = useState<Neubauprojekt[]>([]);
   const [gesuche, setGesuche] = useState<Baugesuch[]>([]);
   const [ereignisse, setEreignisse] = useState<NeubauEreignis[]>([]);
@@ -254,9 +271,34 @@ export default function Radar() {
   }
   useEffect(() => { laden_(); }, []);
 
+  // Geteilter Eintrag: Tab wechseln, ausgeblendete Projekte einblenden, hinscrollen und kurz hervorheben
+  useEffect(() => {
+    if (laden) { return; }
+    const ziel = geteiltProjekt !== null ? 'projekt-' + geteiltProjekt : geteiltGesuch !== null ? 'gesuch-' + geteiltGesuch : null;
+    if (ziel === null) { return; }
+    if (geteiltProjekt !== null) {
+      setTab('projekte');
+      const p = projekte.find((x) => x.id === geteiltProjekt);
+      if (p !== undefined && !AKTIVE_PHASEN.includes(p.phase)) { setZeigeAlte(true); }
+      if (p === undefined) { setMeldung('Das geteilte Projekt wurde nicht gefunden.'); }
+    } else if (geteiltGesuch !== null) {
+      setTab('baugesuche');
+      if (gesuche.find((x) => x.id === geteiltGesuch) === undefined) { setMeldung('Das geteilte Baugesuch wurde nicht gefunden.'); }
+    }
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(ziel);
+      if (el !== null) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }, 150);
+    // Hervorhebung nach ein paar Sekunden aufheben und den Parameter aus der URL nehmen
+    const t2 = window.setTimeout(() => { setParams({}, { replace: true }); }, 6000);
+    return () => { window.clearTimeout(t); window.clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laden, geteiltProjekt, geteiltGesuch]);
+
   const gefiltert = useMemo(() => {
     const s = suche.trim().toLowerCase();
     return gesuche.filter((b) => {
+      if (b.id === geteiltGesuch) { return true; } // geteiltes Gesuch immer zeigen
       const e = einstufungVon(b);
       if (ein === 'relevant' && !istRelevant(b)) { return false; }
       if (ein === 'fokus' && (e !== 'fokus' || b.status === 'irrelevant')) { return false; }
@@ -271,11 +313,11 @@ export default function Radar() {
       if (s !== '' && ![b.adresse, b.beschreibung, b.bauherr, b.projektverfasser, b.gemeinde, b.ortsteil, b.begruendung].join(' ').toLowerCase().includes(s)) { return false; }
       return true;
     }).sort((x, y) => {
-      // Fokus vor Prüfen, innerhalb nach Publikationsdatum
-      const r = (b: Baugesuch) => (einstufungVon(b) === 'fokus' ? 0 : einstufungVon(b) === 'pruefen' ? 1 : 2);
+      // Geteiltes Gesuch zuoberst, dann Fokus vor Prüfen, innerhalb nach Publikationsdatum
+      const r = (b: Baugesuch) => (b.id === geteiltGesuch ? -1 : einstufungVon(b) === 'fokus' ? 0 : einstufungVon(b) === 'pruefen' ? 1 : 2);
       return r(x) - r(y) || String(y.publiziert_am || '').localeCompare(String(x.publiziert_am || ''));
     });
-  }, [gesuche, ein, kat, typ, stat, kanton, gemeinde, suche]);
+  }, [gesuche, ein, kat, typ, stat, kanton, gemeinde, suche, geteiltGesuch]);
 
   const anzahlEin = useMemo(() => {
     const offenOk = (b: Baugesuch) => stat !== 'offen' || !(b.status === 'gesichtet' || b.neubauprojekt_id !== null);
@@ -396,7 +438,7 @@ export default function Radar() {
                 <div className="radar-gruppe-kopf"><h2>{ph.name} <span className="muted">({liste.length})</span></h2><span className="xs muted">{ph.hinweis}</span></div>
                 <div className="radar-projekte">
                   {liste.map((p) => (
-                    <ProjektKarte key={p.id} p={p} leser={leser}
+                    <ProjektKarte key={p.id} p={p} leser={leser} hervorgehoben={p.id === geteiltProjekt}
                       gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
                       ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
                       inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
@@ -414,7 +456,7 @@ export default function Radar() {
               {zeigeAlte ? (
                 <div className="radar-projekte">
                   {alt.map((p) => (
-                    <ProjektKarte key={p.id} p={p} leser={leser}
+                    <ProjektKarte key={p.id} p={p} leser={leser} hervorgehoben={p.id === geteiltProjekt}
                       gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
                       ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
                       inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
@@ -468,7 +510,7 @@ export default function Radar() {
             {gefiltert.slice(0, anzahl).map((b) => {
               const projekt = b.neubauprojekt_id !== null ? projekte.find((p) => p.id === b.neubauprojekt_id) : undefined;
               return (
-                <div key={b.id} className={'radar-gesuch' + (b.status === 'neu' && b.neubauprojekt_id === null && istRelevant(b) ? ' neu' : '') + (einstufungVon(b) === 'fokus' ? ' fokus' : '') + (!istRelevant(b) ? ' aus' : '')}>
+                <div key={b.id} id={'gesuch-' + b.id} className={'radar-gesuch' + (b.status === 'neu' && b.neubauprojekt_id === null && istRelevant(b) ? ' neu' : '') + (einstufungVon(b) === 'fokus' ? ' fokus' : '') + (!istRelevant(b) ? ' aus' : '') + (b.id === geteiltGesuch ? ' geteilt' : '')}>
                   <div className="radar-gesuch-kopf">
                     <span className="tnum small muted">{dateShort(b.publiziert_am)}</span>
                     <span className="radar-gesuch-ort">{b.gemeinde}{b.ortsteil && b.gemeinde && !b.gemeinde.toLowerCase().startsWith(b.ortsteil.toLowerCase().replace(/\s+(zh|sz|sg)$/, '')) ? ' (' + b.ortsteil + ')' : ''}</span>
@@ -495,7 +537,14 @@ export default function Radar() {
                     </div>
                   ) : null}
                   <div className="radar-gesuch-fuss">
-                    {b.url ? <a className="small" href={b.url} target="_blank" rel="noreferrer">{b.quelle}</a> : <span className="small muted">{b.quelle}</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {b.url ? <a className="small" href={b.url} target="_blank" rel="noreferrer">{b.quelle}</a> : <span className="small muted">{b.quelle}</span>}
+                      <TeilenButton className="btn sm" nurIcon inhalt={{
+                        titel: 'Baugesuch ' + (b.adresse || '') + (b.gemeinde ? ', ' + b.gemeinde : ''),
+                        text: [b.beschreibung, b.bauherr ? 'Bauherr: ' + b.bauherr : null, projekt ? 'Projekt: ' + projekt.name : null].filter(Boolean).join(' · '),
+                        pfad: '/radar?gesuch=' + b.id,
+                      }} />
+                    </div>
                     {!leser ? (
                       <div className="radar-aktionen">
                         {b.neubauprojekt_id === null ? <button type="button" className="btn sm" onClick={() => setModal({ start: { name: (b.adresse || 'Projekt') + ', ' + (b.gemeinde || ''), gemeinde: b.gemeinde, kanton: b.kanton, adresse: b.adresse, phase: 'geplant', bauherr: b.bauherr, einheiten: b.wohnungen, notiz: b.beschreibung }, gesuchId: b.id })}>Projekt anlegen</button> : null}

@@ -498,6 +498,16 @@ table.list th:first-child .th-sort { padding-left: 18px; padding-right: 0; }
   .radar-gemeinde > span:nth-child(3) { display: none; }
 }
 .filter-felder > .radar-suche { flex: 1 1 260px; max-width: 420px; }
+
+/* Teilen */
+.btn.teilen-ok { border-color: var(--green); color: var(--green-dark); background: var(--green-soft); }
+.radar-projekt.geteilt, .radar-gesuch.geteilt { animation: geteilt-puls 6s ease-out; box-shadow: inset 3px 0 0 var(--accent); }
+@keyframes geteilt-puls {
+  0% { background: var(--accent-soft); }
+  70% { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
+.radar-projekt.geteilt { box-shadow: 0 0 0 2px var(--accent); }
 @media (max-width: 720px) { .filter-felder > .radar-suche { grid-column: 1 / -1; max-width: none; } }
 .radar-inserate { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .radar-inserate .xs { flex-basis: 100%; }

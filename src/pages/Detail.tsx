@@ -18,6 +18,7 @@ import AmpelInfo from '../components/AmpelInfo';
 import FinanzierungKarte from '../components/FinanzierungKarte';
 import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import ScoreInfo, { scoreFarbe } from '../components/ScoreInfo';
+import TeilenButton from '../components/TeilenButton';
 import type { ExposeExtrakt, Gemeinde, ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
@@ -235,6 +236,11 @@ export default function Detail() {
           ) : (
             <span className="chip link-fehlt" style={{ padding: '10px 12px' }} title="Kein Direktlink hinterlegt, wird beim nächsten Lauf ergänzt">Kein Direktlink zum Inserat</span>
           )}
+          <TeilenButton style={{ minHeight: 44 }} inhalt={{
+            titel: o.ort + ' · ' + (o.zimmer !== null ? o.zimmer + '-Zimmer-' : '') + typLabel(o.typ),
+            text: [o.adresse ? o.adresse : null, o.preis_chf !== null ? chf(o.preis_chf, true) : null, o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : null].filter(Boolean).join(' · '),
+            pfad: '/inserate/' + o.id,
+          }} />
           {!leser ? (
             <>
               <button type="button" className="btn" style={{ minHeight: 44 }} onClick={() => setZfOffen(true)} title="Dublette manuell zusammenführen">Zusammenführen</button>
