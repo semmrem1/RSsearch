@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { pushAktivieren, pushDeaktivieren, pushStatus, pushMoeglich } from '../lib/push';
 import { chf } from '../lib/format';
-import type { BudgetPosten, Gemeinde, Haushalt, Profile } from '../lib/types';
+import type { BudgetPosten, Gemeinde, Haushalt, Kriterium, KriteriumGewicht, Profile } from '../lib/types';
 import { budget } from '../lib/budget';
+import { eigenkapital } from '../lib/finanz';
 
 function Zahl({ id, label, wert, onChange, hinweis, einheit }: { id: string; label: string; wert: number | null; onChange: (v: number | null) => void; hinweis?: string; einheit?: string }) {
   return (
@@ -34,6 +35,9 @@ export default function Einstellungen() {
   const [apiKey, setApiKey] = useState('');
   const [geheimnisse, setGeheimnisse] = useState<Record<string, boolean>>({});
   const [keyMeldung, setKeyMeldung] = useState<string | null>(null);
+  const [kriterien, setKriterien] = useState<Kriterium[]>([]);
+  const [gewichte, setGewichte] = useState<KriteriumGewicht[]>([]);
+  const [gewichtMeldung, setGewichtMeldung] = useState<string | null>(null);
 
   useEffect(() => { setH(haushalt); }, [haushalt]);
   useEffect(() => { setPersonen(profiles); }, [profiles]);
@@ -41,6 +45,8 @@ export default function Einstellungen() {
   useEffect(() => {
     pushStatus().then(setPush);
     supabase.from('gemeinden').select('*').order('kanton').order('name').then(({ data }) => { if (data) { setGemeinden(data as Gemeinde[]); } });
+    supabase.from('kriterien').select('*').order('sort').then(({ data }) => { if (data) { setKriterien(data as Kriterium[]); } });
+    supabase.from('kriterien_gewichte').select('*').then(({ data }) => { if (data) { setGewichte(data as KriteriumGewicht[]); } });
     supabase.rpc('geheimnisse_vorhanden').then(({ data }) => {
       const m: Record<string, boolean> = {};
       ((data || []) as { name: string; gesetzt: boolean }[]).forEach((r) => { m[r.name] = r.gesetzt; });
@@ -92,9 +98,23 @@ export default function Einstellungen() {
   }
 
   async function personSpeichern(p: Profile) {
-    const { error } = await supabase.from('profiles').update({ nettolohn_100_monat: p.nettolohn_100_monat !== undefined ? p.nettolohn_100_monat : null, pensum_pct: p.pensum_pct !== undefined && p.pensum_pct !== null ? p.pensum_pct : 100 }).eq('id', p.id);
+    const { error } = await supabase.from('profiles').update({ nettolohn_100_monat: p.nettolohn_100_monat !== undefined ? p.nettolohn_100_monat : null, pensum_pct: p.pensum_pct !== undefined && p.pensum_pct !== null ? p.pensum_pct : 100, saeule3a: p.saeule3a !== undefined && p.saeule3a !== null ? p.saeule3a : 0 }).eq('id', p.id);
     setBudgetMeldung(error ? error.message : 'Gespeichert');
     if (!error) { reloadStammdaten(); }
+  }
+
+  const gewicht = (userId: string, code: string): number => {
+    const g = gewichte.find((x) => x.user_id === userId && x.kriterium === code);
+    return g ? g.gewicht : 5;
+  };
+  async function gewichtSetzen(code: string, v: number) {
+    if (me === null) { return; }
+    const { error } = await supabase.from('kriterien_gewichte').upsert({ user_id: me.id, kriterium: code, gewicht: v, updated_at: new Date().toISOString() });
+    setGewichtMeldung(error ? error.message : 'Gespeichert');
+    if (!error) {
+      const { data } = await supabase.from('kriterien_gewichte').select('*');
+      if (data) { setGewichte(data as KriteriumGewicht[]); }
+    }
   }
 
   async function postenSpeichern(x: BudgetPosten) {
@@ -141,7 +161,7 @@ export default function Einstellungen() {
   return (
     <>
       <div className="page-head">
-        <div><h1>Einstellungen</h1><p className="sub">Benachrichtigungen, Arbeitsort, Finanzen, Gemeinden, Exposé-Extraktion</p></div>
+        <div><h1>Einstellungen</h1><p className="sub">Benachrichtigungen, Arbeitsort, Finanzen, Budget, Score-Modell, Gemeinden, Exposé-Extraktion</p></div>
         <Link to="/lauf" className="btn">Lauf-Protokoll</Link>
       </div>
 
@@ -184,7 +204,8 @@ export default function Einstellungen() {
             <h2 id="fin-h">Haushalt &amp; Tragbarkeit</h2>
             <p className="small muted" style={{ marginTop: 4 }}>Gemeinsame Werte für beide. Bankübliche Rechnung: kalkulatorischer Zins, Nebenkosten, Amortisation der 2. Hypothek auf 65 % Belehnung. Tragbar, wenn die Kosten unter dem Maximum liegen.</p>
             <div className="form-grid" style={{ marginTop: 12 }}>
-              <Zahl id="ek" label="Eigenkapital" einheit="CHF" wert={h.eigenkapital} onChange={(v) => setH({ ...h, eigenkapital: v })} hinweis="Inkl. Vorsorgegelder, die eingesetzt werden" />
+              <Zahl id="ek" label="Eigenkapital" einheit="CHF" wert={h.eigenkapital} onChange={(v) => setH({ ...h, eigenkapital: v })} hinweis="Ersparnisse und Konto beider Personen; Säule 3a und erweitertes EK separat unten" />
+              <Zahl id="ekerw" label="Erweitertes EK" einheit="CHF" wert={h.ek_erweitert} onChange={(v) => setH({ ...h, ek_erweitert: v !== null ? v : 0 })} hinweis="z.B. Darlehen Götti; wird auf jedes Inserat übernommen und ist dort anpassbar" />
               <Zahl id="eink" label="Haushaltseinkommen pro Jahr" einheit="CHF brutto" wert={h.einkommen_jahr} onChange={(v) => setH({ ...h, einkommen_jahr: v })} />
               <Zahl id="zins" label="Kalkulatorischer Zins" einheit="%" wert={h.zins_kalk} onChange={(v) => setH({ ...h, zins_kalk: v !== null ? v : 5 })} />
               <Zahl id="nk" label="Nebenkosten" einheit="% des Preises" wert={h.nebenkosten_pct} onChange={(v) => setH({ ...h, nebenkosten_pct: v !== null ? v : 1 })} />
@@ -192,11 +213,26 @@ export default function Einstellungen() {
               <Zahl id="bel" label="Max. Belehnung" einheit="%" wert={h.belehnung_max} onChange={(v) => setH({ ...h, belehnung_max: v !== null ? v : 80 })} />
               <Zahl id="trag" label="Max. Tragbarkeit" einheit="%" wert={h.tragbarkeit_max} onChange={(v) => setH({ ...h, tragbarkeit_max: v !== null ? v : 33 })} />
               <Zahl id="kaufnk" label="Kaufnebenkosten" einheit="% des Preises" wert={h.kaufnebenkosten_pct} onChange={(v) => setH({ ...h, kaufnebenkosten_pct: v !== null ? v : 1.5 })} hinweis="Notar, Grundbuch, Handänderungssteuer; je nach Kanton ca. 0.5 bis 2 %" />
+              <Zahl id="kinder" label="Kinder" einheit="Anzahl" wert={h.kinder} onChange={(v) => setH({ ...h, kinder: v !== null ? Math.max(0, Math.round(v)) : 0 })} hinweis="Für die Steuerschätzung (gemeinsame Veranlagung, Kinderabzüge)" />
+            </div>
+            <h3 className="small" style={{ marginTop: 14, fontWeight: 600 }}>Säule 3a pro Person</h3>
+            <p className="xs muted" style={{ marginTop: 2 }}>Wird standardmässig als Eigenkapital eingesetzt. Auf jedem Inserat lässt sich der Betrag anpassen oder auf 0 setzen («nicht einsetzen»), ohne den Standard hier zu ändern.</p>
+            <div className="rows" style={{ marginTop: 6 }}>
+              {personen.map((p) => (
+                <div key={p.id} className="budget-person">
+                  <span style={{ color: p.farbe, fontWeight: 600 }}>{p.name.split(' ')[0]}</span>
+                  <label className="field"><span className="xs muted">Säule 3a (CHF)</span>
+                    <input className="input" inputMode="numeric" value={p.saeule3a !== null && p.saeule3a !== undefined ? String(p.saeule3a) : '0'} onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ''); setPersonen(personen.map((x) => (x.id === p.id ? { ...x, saeule3a: v === '' ? 0 : Number(v) } : x))); }} onBlur={() => personSpeichern(personen.find((x) => x.id === p.id) as Profile)} />
+                  </label>
+                  <span /><span />
+                </div>
+              ))}
+              <div className="small muted tnum">Eigenkapital total (Standard): CHF {chf(eigenkapital(h, personen).total)}</div>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
               <button type="button" className="btn primary" onClick={haushaltSpeichern}>Speichern</button>
               {hGespeichert !== null ? <span className="small muted">{hGespeichert}</span> : null}
-              {h.eigenkapital !== null && h.einkommen_jahr !== null ? <span className="small muted">Beispiel 2.0 Mio: Hypothek CHF {chf(Math.max(0, 2000000 - h.eigenkapital))}</span> : null}
+              {h.eigenkapital !== null && h.einkommen_jahr !== null ? <span className="small muted">Beispiel 2.0 Mio: Hypothek CHF {chf(Math.max(0, 2000000 - eigenkapital(h, personen).total))}</span> : null}
             </div>
           </section>
 
@@ -249,6 +285,33 @@ export default function Einstellungen() {
               <span className="small muted tnum">Total Ausgaben: CHF {chf(posten.reduce((s, x) => s + (Number(x.betrag_monat) || 0), 0))} pro Monat</span>
               {budgetMeldung !== null ? <span className="small muted">· {budgetMeldung}</span> : null}
             </div>
+          </section>
+
+          <section className="card pad" aria-labelledby="modell-h">
+            <h2 id="modell-h">Score-Modell</h2>
+            <p className="small muted" style={{ marginTop: 4 }}>Jede Person gewichtet jedes Kriterium von 1 (unwichtig) bis 10 (entscheidend). Die Objektbewertung pro Person ist der gewichtete Durchschnitt ihrer Kriterienbewertungen (1 bis 5) auf dem Inserat; «Gemeinsam» ist der Durchschnitt beider. Daneben steht der automatische Score 0 bis 100 aus objektiven Faktoren (Tragbarkeit, Budget, Preis pro m², Fläche, Zimmer, Typ, Baujahr, Heizung, Steuern, Pendeln).</p>
+            <div className="rows" style={{ marginTop: 10 }}>
+              <div className="krit-kopf" style={{ display: 'grid', gridTemplateColumns: '1fr ' + personen.map(() => 'auto').join(' '), gap: 12, alignItems: 'center' }}>
+                <span className="small muted">Kriterium</span>
+                {personen.map((p) => <span key={p.id} className="small" style={{ color: p.farbe, fontWeight: 600, textAlign: 'center' }}>{p.name.split(' ')[0]}{me !== null && me.id === p.id ? ' (ich)' : ''}</span>)}
+              </div>
+              {kriterien.map((k) => (
+                <div key={k.code} style={{ display: 'grid', gridTemplateColumns: '1fr ' + personen.map(() => 'auto').join(' '), gap: 12, alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--line-soft)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}><span style={{ fontWeight: 600 }}>{k.name}</span><span className="xs muted">{k.beschreibung}</span></div>
+                  {personen.map((p) => {
+                    const g = gewicht(p.id, k.code);
+                    const mein = me !== null && me.id === p.id;
+                    if (!mein) { return <span key={p.id} className="tnum" style={{ color: p.farbe, fontWeight: 700, textAlign: 'center', minWidth: 60 }}>{g}</span>; }
+                    return (
+                      <span key={p.id} className="gewicht-btns" role="radiogroup" aria-label={'Gewicht ' + k.name}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <button key={n} type="button" role="radio" aria-checked={g === n} className={'gewicht-btn' + (n <= g ? ' on' : '')} style={n <= g ? { background: p.farbe, borderColor: p.farbe } : undefined} onClick={() => gewichtSetzen(k.code, n)}>{n}</button>)}
+                      </span>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="xs muted" style={{ marginTop: 8 }}>Ohne Eintrag zählt ein Kriterium mit Gewicht 5.{gewichtMeldung !== null ? ' · ' + gewichtMeldung : ''}</div>
           </section>
 
           <section className="card pad" aria-labelledby="key-h">

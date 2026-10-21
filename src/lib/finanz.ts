@@ -1,4 +1,4 @@
-import type { Haushalt } from './types';
+import type { Haushalt, ObjektBudgetDaten, Profile } from './types';
 
 export interface Sicht { zins: number; zinsen: number; nebenkosten: number; amortisation: number; kosten: number; quote: number | null; stufe: 'ok' | 'knapp' | 'nein' | 'unbekannt' }
 
@@ -17,7 +17,37 @@ export interface Tragbarkeit {
   zinsen: number; nebenkosten: number; amortisation: number; kosten: number; quote: number | null; stufe: Sicht['stufe'];
 }
 
-export const HAUSHALT_STANDARD: Haushalt = { id: 1, eigenkapital: null, einkommen_jahr: null, zins_kalk: 5, nebenkosten_pct: 1, amortisation_jahre: 15, belehnung_max: 80, tragbarkeit_max: 33, zins_effektiv: 1.5, weitere_einkuenfte_monat: 0, kaufnebenkosten_pct: 1.5 };
+export const HAUSHALT_STANDARD: Haushalt = { id: 1, eigenkapital: null, einkommen_jahr: null, zins_kalk: 5, nebenkosten_pct: 1, amortisation_jahre: 15, belehnung_max: 80, tragbarkeit_max: 33, zins_effektiv: 1.5, weitere_einkuenfte_monat: 0, kaufnebenkosten_pct: 1.5, ek_erweitert: 0, kinder: 2 };
+
+/** Eigenkapital-Bausteine: Basis (Haushalt), erweitertes EK (z.B. Götti), Säule 3a pro Person. Pro Objekt überschreibbar (objekt_budget.daten.ek). */
+export interface Eigenkapital {
+  basis: number;
+  erweitert: number;
+  saeule3a: Record<string, number>; // Profil-ID → eingesetzter Betrag
+  total: number;
+  standardBasis: number;
+  standardErweitert: number;
+  standardSaeule3a: Record<string, number>;
+  angepasst: boolean;
+}
+
+export function eigenkapital(h: Haushalt, profiles: Profile[], daten?: ObjektBudgetDaten | null): Eigenkapital {
+  const ek = daten !== undefined && daten !== null && daten.ek !== undefined ? daten.ek : {};
+  const standardBasis = h.eigenkapital !== null ? Number(h.eigenkapital) : 0;
+  const standardErweitert = Number(h.ek_erweitert || 0);
+  const basis = ek.basis !== undefined ? Number(ek.basis) : standardBasis;
+  const erweitert = ek.erweitert !== undefined ? Number(ek.erweitert) : standardErweitert;
+  const standardSaeule3a: Record<string, number> = {};
+  const saeule3a: Record<string, number> = {};
+  profiles.forEach((p) => {
+    const std = p.saeule3a !== null && p.saeule3a !== undefined ? Number(p.saeule3a) : 0;
+    standardSaeule3a[p.id] = std;
+    saeule3a[p.id] = ek.saeule3a !== undefined && ek.saeule3a[p.id] !== undefined ? Number(ek.saeule3a[p.id]) : std;
+  });
+  const total = basis + erweitert + Object.values(saeule3a).reduce((s, x) => s + x, 0);
+  const angepasst = basis !== standardBasis || erweitert !== standardErweitert || profiles.some((p) => saeule3a[p.id] !== standardSaeule3a[p.id]);
+  return { basis, erweitert, saeule3a, total, standardBasis, standardErweitert, standardSaeule3a, angepasst };
+}
 
 function sicht(preis: number, hypothek: number, zins: number, h: Haushalt, ekZuTief: boolean): Sicht {
   const zinsen = hypothek * (zins / 100);
@@ -33,10 +63,13 @@ function sicht(preis: number, hypothek: number, zins: number, h: Haushalt, ekZuT
   return { zins, zinsen, nebenkosten, amortisation, kosten, quote, stufe };
 }
 
-/** Bankübliche Tragbarkeit (kalk. Zins) und effektive Belastung (realer Zins, pro Objekt überschreibbar). */
-export function tragbarkeit(preis: number | null, h: Haushalt, zinsEffektiv?: number | null): Tragbarkeit | null {
+/**
+ * Bankübliche Tragbarkeit (kalk. Zins) und effektive Belastung (realer Zins, pro Objekt überschreibbar).
+ * @param ekTotal eingesetztes Eigenkapital (siehe eigenkapital()); ohne Angabe nur das Basis-Eigenkapital des Haushalts
+ */
+export function tragbarkeit(preis: number | null, h: Haushalt, zinsEffektiv?: number | null, ekTotal?: number | null): Tragbarkeit | null {
   if (preis === null || preis <= 0) { return null; }
-  const ek = h.eigenkapital !== null ? Number(h.eigenkapital) : 0;
+  const ek = ekTotal !== undefined && ekTotal !== null ? ekTotal : (h.eigenkapital !== null ? Number(h.eigenkapital) + Number(h.ek_erweitert || 0) : 0);
   const hypothek = Math.max(0, preis - ek);
   const belehnung = hypothek / preis;
   const ekEingesetzt = preis - hypothek;

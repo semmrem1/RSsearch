@@ -16,7 +16,8 @@ import { budget, ueberschussFarbe } from '../lib/budget';
 import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
 import AmpelInfo from '../components/AmpelInfo';
 import FinanzierungKarte from '../components/FinanzierungKarte';
-import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
+import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
+import ScoreInfo, { scoreFarbe } from '../components/ScoreInfo';
 import type { ExposeExtrakt, Gemeinde, ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
@@ -274,8 +275,12 @@ export default function Detail() {
 
       {(() => {
         const zEff = budgetDaten !== null && budgetDaten.zins_effektiv !== undefined ? Number(budgetDaten.zins_effektiv) : Number(haushalt.zins_effektiv);
-        const t = tragbarkeit(o.preis_chf, haushalt, zEff);
-        const b = budget(o.preis_chf, haushalt, profiles, budgetPosten, budgetDaten);
+        const ek = eigenkapital(haushalt, profiles, budgetDaten);
+        const t = tragbarkeit(o.preis_chf, haushalt, zEff, ek.total);
+        const gs = gemeinde !== null ? { name: gemeinde.name, kanton: gemeinde.kanton, steuerfuss: gemeinde.steuerfuss, steuerfuss_kanton: gemeinde.steuerfuss_kanton !== undefined ? gemeinde.steuerfuss_kanton : null, steuerfuss_bezirk: gemeinde.steuerfuss_bezirk !== undefined ? gemeinde.steuerfuss_bezirk : null } : null;
+        const b = budget(o.preis_chf, haushalt, profiles, budgetPosten, budgetDaten, gs);
+        const scoreAuto = ue !== null ? ue.score_auto : (o.score_auto !== undefined ? o.score_auto : null);
+        const scoreDetail = ue !== null ? ue.score_auto_detail : (o.score_auto_detail !== undefined ? o.score_auto_detail : null);
         const amp = ue !== null ? ampel(ue, haushalt, profiles, budgetPosten, budgetDaten) : null;
         const pz = ue !== null ? ue.pendelzeiten : {};
         const kpi = (k: string, v: ReactNode, sub?: ReactNode, farbe?: string) => (
@@ -299,10 +304,16 @@ export default function Detail() {
             {kpi('Am Markt', (ue !== null ? ue.tage_am_markt : 0) + ' Tage', 'seit ' + dateShort(o.erstmals_gesehen) + ' · zuletzt ' + dateShort(o.zuletzt_gesehen), ue !== null && ue.tage_am_markt > 90 ? 'var(--warm-dark)' : undefined)}
             {kpi('Tragbarkeit Bank', t !== null && (t.bank.quote !== null || t.ekZuTief) ? (t.ekZuTief ? 'EK zu tief' : quoteText(t.bank)) : '–', 'kalk. ' + haushalt.zins_kalk + ' % · max. ' + haushalt.tragbarkeit_max + ' %', t !== null ? stufeFarbe(t.bank.stufe) : undefined)}
             {kpi('Belastung pro Monat', t !== null && haushalt.eigenkapital !== null ? 'CHF ' + chf(t.effektiv.kosten / 12) : '–', 'Zins ' + zEff + ' % effektiv · Hypothek ' + (t !== null ? chf(t.hypothek) : '–'))}
-            {kpi('Budget', b.vollstaendig ? (b.ueberschuss < 0 ? '−' : '+') + 'CHF ' + chf(Math.abs(b.ueberschuss)) + '/Mt' : '–', b.vollstaendig && b.sparquote !== null ? (b.sparquote * 100).toFixed(0) + ' % Sparquote' : 'Nettolohn in Einstellungen', b.vollstaendig ? ueberschussFarbe(b) : undefined)}
+            {kpi('Eigenkapital', t !== null && haushalt.eigenkapital !== null ? 'CHF ' + chf(t.ekEingesetzt) : '–', t !== null ? (t.belehnung * 100).toFixed(0) + ' % Belehnung · Mittelbedarf ' + chf(t.mittelbedarf) + (ek.angepasst ? ' · für dieses Objekt angepasst' : '') : 'in Einstellungen', t !== null && t.ekZuTief ? 'var(--warm)' : undefined)}
+            {kpi('Budget', b.vollstaendig ? (b.ueberschuss < 0 ? '−' : '+') + 'CHF ' + chf(Math.abs(b.ueberschuss)) + '/Mt' : '–', b.vollstaendig && b.sparquote !== null ? (b.sparquote * 100).toFixed(0) + ' % Sparquote' + (b.steuer !== null ? ' · Steuern ~' + chf(b.steuer.monat) + '/Mt' : '') : 'Nettolohn in Einstellungen', b.vollstaendig ? ueberschussFarbe(b) : undefined)}
             {kpi('Pendeln ÖV', profiles.map((p) => p.kuerzel + ' ' + (pz[p.id] ? pz[p.id].minuten + "'" : '–')).join(' · '), profiles.map((p) => (pz[p.id] && pz[p.id].nach ? p.kuerzel + ' → ' + pz[p.id].nach : null)).filter((x) => x !== null).join(' · ') || 'Arbeitsort in Einstellungen')}
-            {kpi('Score', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · '))}
-            {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') : o.ort)}
+            <ScoreInfo key="score" score={scoreAuto} detail={scoreDetail} className="kpi ek ek-ampel" style={{ borderColor: scoreFarbe(scoreAuto), cursor: 'help' }}>
+              <span className="xs muted">Score</span>
+              <span className="tnum ek-wert" style={{ color: scoreFarbe(scoreAuto) }}>{scoreAuto !== null && scoreAuto !== undefined ? scoreAuto + ' / 100' : '–'}</span>
+              <span className="xs muted ek-sub">{scoreDetail !== null && scoreDetail !== undefined && scoreDetail.faktoren.length > 0 ? 'schwach: ' + (scoreDetail.faktoren.filter((f) => f.max > 0 && f.punkte / f.max < 0.4).map((f) => f.name).join(', ') || 'nichts') + ' · Details beim Überfahren' : 'automatisch, Details beim Überfahren'}</span>
+            </ScoreInfo>
+            {kpi('Objektbewertung', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · ') + ' · gewichtete Kriterien')}
+            {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') + (gemeinde.steuerfuss_kanton ? ' · gesamt ' + (Number(gemeinde.steuerfuss) + Number(gemeinde.steuerfuss_kanton) + Number(gemeinde.steuerfuss_bezirk || 0)) + ' %' : '') : o.ort)}
           </section>
         );
       })()}
@@ -316,7 +327,7 @@ export default function Detail() {
           <BudgetKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} gemeinde={gemeinde} />
         </section>
         <section className="card pad" aria-labelledby="krit-h">
-          <div className="card-head"><h2 id="krit-h">Kriterien &amp; Bewertung</h2><span className="xs muted">1 schlecht · 5 sehr gut · pro Person</span></div>
+          <div className="card-head"><h2 id="krit-h">Kriterien &amp; Bewertung</h2><span className="xs muted">1 schlecht · 5 sehr gut · gewichtet nach eurem Score-Modell</span></div>
           <KriterienGrid objektId={o.id} onChange={() => load()} />
         </section>
       </div>

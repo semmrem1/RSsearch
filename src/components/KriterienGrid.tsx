@@ -3,16 +3,19 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { StarsInput, StarsText } from './Stars';
 import { dateShort } from '../lib/format';
-import type { Bewertung, Kriterium, KriterienBewertung } from '../lib/types';
+import type { Bewertung, Kriterium, KriterienBewertung, KriteriumGewicht } from '../lib/types';
+import { Link } from 'react-router-dom';
 
 /**
- * Kriterienkatalog: jede Person bewertet jedes Kriterium 1 bis 5, Score = Durchschnitt.
+ * Kriterienkatalog: jede Person bewertet jedes Kriterium 1 bis 5. Objektbewertung pro Person = gewichteter Durchschnitt
+ * nach ihrem Score-Modell (Gewichte 1 bis 10 unter Einstellungen, ohne Eintrag 5); «Gemeinsam» = Durchschnitt beider.
  * Dazu pro Person ein «Gefühl» (Sterne), Notiz, Tags und die Markierungen Favorit / Uninteressant (Tabelle bewertungen).
  */
 export default function KriterienGrid({ objektId, onChange }: { objektId: string; onChange?: () => void }) {
   const { me, profiles, leser } = useApp();
   const [kriterien, setKriterien] = useState<Kriterium[]>([]);
   const [werte, setWerte] = useState<KriterienBewertung[]>([]);
+  const [gewichte, setGewichte] = useState<KriteriumGewicht[]>([]);
   const [bew, setBew] = useState<Bewertung[]>([]);
   const [notiz, setNotiz] = useState('');
   const [tags, setTags] = useState('');
@@ -20,14 +23,16 @@ export default function KriterienGrid({ objektId, onChange }: { objektId: string
   const timer = useRef<number | null>(null);
 
   const load = async () => {
-    const [k, w, b] = await Promise.all([
+    const [k, w, b, g] = await Promise.all([
       supabase.from('kriterien').select('*').order('sort'),
       supabase.from('kriterien_bewertungen').select('*').eq('objekt_id', objektId),
       supabase.from('bewertungen').select('*').eq('objekt_id', objektId),
+      supabase.from('kriterien_gewichte').select('*'),
     ]);
     if (k.data) { setKriterien(k.data as Kriterium[]); }
     if (w.data) { setWerte(w.data as KriterienBewertung[]); }
     if (b.data) { setBew(b.data as Bewertung[]); }
+    if (g.data) { setGewichte(g.data as KriteriumGewicht[]); }
   };
   useEffect(() => { load(); }, [objektId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -44,10 +49,17 @@ export default function KriterienGrid({ objektId, onChange }: { objektId: string
     const w = werte.find((x) => x.user_id === userId && x.kriterium === code);
     return w ? w.wert : null;
   };
+  const gewicht = (userId: string, code: string): number => {
+    const g = gewichte.find((x) => x.user_id === userId && x.kriterium === code);
+    return g ? g.gewicht : 5;
+  };
+  /** Gewichteter Durchschnitt der bewerteten Kriterien nach dem Score-Modell dieser Person. */
   const score = (userId: string): number | null => {
     const w = werte.filter((x) => x.user_id === userId);
     if (w.length === 0) { return null; }
-    return w.reduce((s, x) => s + x.wert, 0) / w.length;
+    const summeG = w.reduce((s, x) => s + gewicht(userId, x.kriterium), 0);
+    if (summeG === 0) { return null; }
+    return w.reduce((s, x) => s + x.wert * gewicht(userId, x.kriterium), 0) / summeG;
   };
   const meine = me !== null ? bew.find((x) => x.user_id === me.id) : undefined;
 
@@ -104,7 +116,7 @@ export default function KriterienGrid({ objektId, onChange }: { objektId: string
       </div>
       {kriterien.map((k) => (
         <div key={k.code} className="krit-zeile">
-          <div className="krit-name"><span style={{ fontWeight: 600 }}>{k.name}</span><span className="xs muted">{k.beschreibung}</span></div>
+          <div className="krit-name"><span style={{ fontWeight: 600 }}>{k.name}</span><span className="xs muted">{k.beschreibung} · Gewicht {profiles.map((p) => p.kuerzel + ' ' + gewicht(p.id, k.code)).join(' · ')}</span></div>
           {profiles.map((p) => {
             const v = wert(p.id, k.code);
             const mein = me !== null && me.id === p.id;
@@ -122,7 +134,7 @@ export default function KriterienGrid({ objektId, onChange }: { objektId: string
         </div>
       ))}
       <div className="krit-zeile krit-summe">
-        <div className="krit-name"><span style={{ fontWeight: 700 }}>Score</span><span className="xs muted">Durchschnitt aller Kriterien{gesamt !== null ? ' · gesamt ' + gesamt.toFixed(1) : ''}</span></div>
+        <div className="krit-name"><span style={{ fontWeight: 700 }}>Objektbewertung</span><span className="xs muted">gewichtet nach dem <Link to="/einstellungen">Score-Modell</Link> jeder Person{gesamt !== null ? ' · gemeinsam ' + gesamt.toFixed(1) : ''}</span></div>
         {profiles.map((p) => { const s = score(p.id); return <span key={p.id} className="tnum" style={{ color: p.farbe, fontWeight: 700, fontSize: 18, textAlign: 'center' }}>{s !== null ? s.toFixed(1) : '–'}</span>; })}
       </div>
       <div className="krit-zeile">

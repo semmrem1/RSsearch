@@ -15,6 +15,7 @@ export interface Profile {
   arbeitsort_station?: string | null;
   nettolohn_100_monat?: number | null;
   pensum_pct?: number | null;
+  saeule3a?: number | null;
 }
 
 export interface Haushalt {
@@ -29,6 +30,8 @@ export interface Haushalt {
   zins_effektiv: number;
   weitere_einkuenfte_monat: number;
   kaufnebenkosten_pct: number;
+  ek_erweitert: number; // z.B. Darlehen Götti, standardmässig als Eigenkapital eingesetzt
+  kinder: number; // für die Steuerschätzung (gemeinsame Veranlagung)
 }
 
 export interface BudgetPosten { id: string; name: string; betrag_monat: number; kategorie: 'fix' | 'variabel' | 'sparen'; sort: number }
@@ -38,6 +41,8 @@ export interface ObjektBudgetDaten {
   extra?: { name: string; betrag: number }[];
   zins_effektiv?: number;
   weitere_einkuenfte?: number;
+  /** Eigenkapital-Bausteine für dieses Objekt (fehlt = Standard aus Haushalt und Profilen) */
+  ek?: { basis?: number; erweitert?: number; saeule3a?: Record<string, number> };
 }
 
 export interface Gemeinde {
@@ -51,7 +56,15 @@ export interface Gemeinde {
   steuer_beispiel_chf: number | null;
   steuer_beispiel_hinweis: string | null;
   quelle_url: string | null;
+  steuerfuss_kanton?: number | null;
+  steuerfuss_bezirk?: number | null;
 }
+
+export interface KriteriumGewicht { user_id: string; kriterium: string; gewicht: number }
+
+/** Automatischer Score 0..100 (objekte.score_auto_detail, gerechnet in der DB) */
+export interface ScoreFaktor { name: string; punkte: number; max: number; text: string }
+export interface ScoreDetail { score: number | null; punkte_roh?: number; max?: number; faktoren: ScoreFaktor[]; hinweise: string[]; steuer?: Record<string, number | string> | null; stand: string }
 
 export interface Kriterium { code: string; name: string; beschreibung: string | null; sort: number }
 export interface KriterienBewertung { objekt_id: string; user_id: string; kriterium: string; wert: number }
@@ -119,6 +132,9 @@ export interface Objekt {
   bild_fehler: string | null;
   offline_seit: string | null;
   zusammengefuehrt_in?: string | null;
+  heizung?: string | null;
+  score_auto?: number | null;
+  score_auto_detail?: ScoreDetail | null;
   created_at: string;
   updated_at: string;
 }
@@ -147,6 +163,12 @@ export interface ObjektUebersicht extends Objekt {
   steuer_index: number | null;
   steuer_beispiel_chf: number | null;
   tage_am_markt: number;
+  steuerfuss_kanton: number | null;
+  steuerfuss_bezirk: number | null;
+  heizung: string | null;
+  score_auto: number | null;
+  score_auto_detail: ScoreDetail | null;
+  score_auto_am: string | null;
 }
 
 export interface Snapshot {

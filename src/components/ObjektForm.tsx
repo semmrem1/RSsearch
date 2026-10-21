@@ -17,6 +17,7 @@ export default function ObjektForm({ onClose, onSaved }: Props) {
   const [flaeche, setFlaeche] = useState('');
   const [preis, setPreis] = useState('');
   const [baujahr, setBaujahr] = useState('');
+  const [heizung, setHeizung] = useState('');
   const [makler, setMakler] = useState('');
   const [externeId, setExterneId] = useState('');
   const [url, setUrl] = useState('');
@@ -43,6 +44,7 @@ export default function ObjektForm({ onClose, onSaved }: Props) {
       flaeche_m2: flaeche ? Number(flaeche) : null,
       preis_chf: preisNum ? Number(preisNum) : null,
       baujahr: baujahr ? Number(baujahr) : null,
+      heizung: heizung.trim() || null,
       notizen: notizen || null,
       bild_url: bildUrl.trim() || null,
       stufe_code: 'vorgemerkt',
@@ -73,6 +75,7 @@ export default function ObjektForm({ onClose, onSaved }: Props) {
           <div className="field"><label htmlFor="f-m2">Wohnfläche m²</label><input id="f-m2" className="input" inputMode="numeric" value={flaeche} onChange={(e) => setFlaeche(e.target.value)} /></div>
           <div className="field"><label htmlFor="f-preis">Preis CHF</label><input id="f-preis" className="input" inputMode="numeric" value={preis} onChange={(e) => setPreis(e.target.value)} placeholder="1'950'000" /></div>
           <div className="field"><label htmlFor="f-bj">Baujahr</label><input id="f-bj" className="input" inputMode="numeric" value={baujahr} onChange={(e) => setBaujahr(e.target.value)} /></div>
+          <div className="field"><label htmlFor="f-hz">Heizung</label><input id="f-hz" className="input" value={heizung} onChange={(e) => setHeizung(e.target.value)} placeholder="Wärmepumpe, Gas, Öl …" /></div>
           <div className="field"><label htmlFor="f-mk">Makler *</label><input id="f-mk" className="input" value={makler} onChange={(e) => setMakler(e.target.value)} placeholder="Walde, MoneyPark …" required /></div>
           <div className="field"><label htmlFor="f-eid">Externe ID</label><input id="f-eid" className="input" value={externeId} onChange={(e) => setExterneId(e.target.value)} placeholder="L19.120" /></div>
           <div className="field" style={{ gridColumn: '1 / -1' }}><label htmlFor="f-url">Direktlink zum Inserat *</label><input id="f-url" className="input" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… Detailseite des Inserats" required /></div>

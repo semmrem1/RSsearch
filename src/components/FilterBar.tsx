@@ -121,6 +121,10 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
         <label className="f-check small">
           <input type="checkbox" checked={wert.nurUneinig} onChange={(e) => set({ nurUneinig: e.target.checked })} /> Nur uneinig
         </label>
+        <label className="f-check small" title="Automatischer Score 0 bis 100: nur Inserate ab diesem Wert">
+          Score ab
+          <input className="input" type="number" inputMode="numeric" min={0} max={100} step={5} placeholder="0" value={wert.scoreMin !== null ? wert.scoreMin : ''} onChange={(e) => set({ scoreMin: e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) })} style={{ width: 70, minHeight: 36 }} />
+        </label>
         <label className="f-check small" title="ÖV-Pendelzeit zu meinem Arbeitsort">
           🚆 max.
           <input className="input" type="number" inputMode="numeric" min={5} max={180} step={5} placeholder="Min" value={wert.pendelMax !== null ? wert.pendelMax : ''} onChange={(e) => set({ pendelMax: e.target.value === '' ? null : Number(e.target.value) })} style={{ width: 76, minHeight: 36 }} />

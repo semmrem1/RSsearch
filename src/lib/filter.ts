@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { BudgetPosten, Haushalt, ObjektUebersicht, Profile } from './types';
-import { tragbarkeit } from './finanz';
+import { eigenkapital, tragbarkeit } from './finanz';
 import { ampel, uneinig, type AmpelStufe } from './ampel';
 
 export interface ObjektFilter {
@@ -14,9 +14,10 @@ export interface ObjektFilter {
   nurTragbar: boolean;
   nurUneinig: boolean;
   ampel: 'alle' | AmpelStufe;
+  scoreMin: number | null; // automatischer Score 0..100, Mindestwert
 }
 
-export const FILTER_STANDARD: ObjektFilter = { q: '', orte: [], markt: 'alle', phase: 'alle', fav: 'alle', ausgeschieden: true, pendelMax: null, nurTragbar: false, nurUneinig: false, ampel: 'alle' };
+export const FILTER_STANDARD: ObjektFilter = { q: '', orte: [], markt: 'alle', phase: 'alle', fav: 'alle', ausgeschieden: true, pendelMax: null, nurTragbar: false, nurUneinig: false, ampel: 'alle', scoreMin: null };
 
 export interface FilterKontext { me: string | null; haushalt: Haushalt; profiles?: Profile[]; posten?: BudgetPosten[] }
 
@@ -27,7 +28,7 @@ function lesen(key: string, standard: ObjektFilter): ObjektFilter {
     const raw = window.localStorage.getItem('rs.filter.' + key);
     if (raw === null) { return standard; }
     const v = JSON.parse(raw) as Partial<ObjektFilter>;
-    return { ...standard, ...v, orte: Array.isArray(v.orte) ? v.orte : [] };
+    return { ...standard, ...v, orte: Array.isArray(v.orte) ? v.orte : [], scoreMin: typeof v.scoreMin === 'number' ? v.scoreMin : null };
   } catch {
     return standard;
   }
@@ -44,7 +45,7 @@ export function useObjektFilter(key: string, standard: ObjektFilter = FILTER_STA
 }
 
 export function filterAktiv(f: ObjektFilter, standard: ObjektFilter = FILTER_STANDARD): boolean {
-  return f.q.trim() !== '' || f.orte.length > 0 || f.markt !== standard.markt || f.phase !== standard.phase || f.fav !== standard.fav || f.ausgeschieden !== standard.ausgeschieden || f.pendelMax !== null || f.nurTragbar || f.nurUneinig || f.ampel !== 'alle';
+  return f.q.trim() !== '' || f.orte.length > 0 || f.markt !== standard.markt || f.phase !== standard.phase || f.fav !== standard.fav || f.ausgeschieden !== standard.ausgeschieden || f.pendelMax !== null || f.nurTragbar || f.nurUneinig || f.ampel !== 'alle' || f.scoreMin !== null;
 }
 
 export function filtern(objekte: ObjektUebersicht[], f: ObjektFilter, ctx?: FilterKontext): ObjektUebersicht[] {
@@ -54,8 +55,11 @@ export function filtern(objekte: ObjektUebersicht[], f: ObjektFilter, ctx?: Filt
       const pz = ctx.me !== null ? o.pendelzeiten[ctx.me] : undefined;
       if (!pz || pz.minuten > f.pendelMax) { return false; }
     }
+    if (f.scoreMin !== null) {
+      if (o.score_auto === null || o.score_auto === undefined || Number(o.score_auto) < f.scoreMin) { return false; }
+    }
     if (f.nurTragbar && ctx !== undefined) {
-      const t = tragbarkeit(o.preis_chf, ctx.haushalt);
+      const t = tragbarkeit(o.preis_chf, ctx.haushalt, null, eigenkapital(ctx.haushalt, ctx.profiles || []).total);
       if (t === null || t.stufe === 'nein') { return false; }
     }
     if (f.nurUneinig && !uneinig(o)) { return false; }

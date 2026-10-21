@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
   await a.from('expose_extrakte').upsert({ dokument_id: d.id, objekt_id: d.objekt_id, daten, zusammenfassung, modell, erstellt_am: new Date().toISOString() });
 
   // Leere Objektfelder ergänzen (nie überschreiben)
-  const { data: o } = await a.from('objekte').select('baujahr, grundstueck_m2, flaeche_m2, zimmer, plz, adresse, titel').eq('id', d.objekt_id).maybeSingle();
+  const { data: o } = await a.from('objekte').select('baujahr, grundstueck_m2, flaeche_m2, zimmer, plz, adresse, titel, heizung').eq('id', d.objekt_id).maybeSingle();
   if (o !== null) {
     const obj = o as Record<string, unknown>;
     const patch: Record<string, unknown> = {};
@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
     if (obj.plz === null && str('plz') !== null) { patch.plz = str('plz'); }
     if ((obj.adresse === null || !/[0-9]/.test(String(obj.adresse))) && str('adresse') !== null && /[0-9]/.test(str('adresse') as string)) { patch.adresse = str('adresse'); }
     if (obj.titel === null && str('titel') !== null) { patch.titel = str('titel'); }
+    if ((obj.heizung === null || obj.heizung === undefined) && str('heizung') !== null) { patch.heizung = str('heizung'); } // fliesst in den Score
     if (Object.keys(patch).length > 0) { await a.from('objekte').update(patch).eq('id', d.objekt_id); }
   }
   await a.from('aktivitaeten').insert({ objekt_id: d.objekt_id, user_id: b.userId, typ: 'system', titel: 'Exposé ausgewertet', text: d.name + (zusammenfassung !== null ? ': ' + zusammenfassung : '') });

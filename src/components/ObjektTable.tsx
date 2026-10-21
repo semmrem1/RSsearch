@@ -6,26 +6,29 @@ import { useApp } from '../state/AppContext';
 import { StarsText } from './Stars';
 import ObjektBild from './ObjektBild';
 import { quelleDirekt } from '../lib/links';
-import { tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
+import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import type { BudgetPosten, Haushalt, Profile } from '../lib/types';
 import { budget, ueberschussFarbe } from '../lib/budget';
+import { gemeindeAusZeile } from '../lib/steuern';
 import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
 import AmpelInfo from './AmpelInfo';
+import { ScoreBadge } from './ScoreInfo';
 
 type Richtung = 'asc' | 'desc';
 interface Sortierung { key: string; dir: Richtung }
 
 const STANDARD: Sortierung = { key: 'erfasst', dir: 'desc' };
 
-interface SortCtx { h: Haushalt; me: string | null; profiles: Profile[]; posten: BudgetPosten[] }
+interface SortCtx { h: Haushalt; me: string | null; profiles: Profile[]; posten: BudgetPosten[]; ek: number }
 
 function wert(r: ObjektUebersicht, key: string, ctx: SortCtx): number | string | null {
   switch (key) {
     case 'ampel': { const a = ampel(r, ctx.h, ctx.profiles, ctx.posten).stufe; return a === 'gruen' ? 3 : a === 'gelb' ? 2 : a === 'rot' ? 1 : 0; }
-    case 'budget': { const b = budget(r.preis_chf, ctx.h, ctx.profiles, ctx.posten); return b.vollstaendig ? b.ueberschuss : null; }
+    case 'budget': { const b = budget(r.preis_chf, ctx.h, ctx.profiles, ctx.posten, null, gemeindeAusZeile(r)); return b.vollstaendig ? b.ueberschuss : null; }
     case 'tage': return r.tage_am_markt;
-    case 'score': return r.score_gesamt;
-    case 'tragbar': { const t = tragbarkeit(r.preis_chf, ctx.h); return t !== null && t.quote !== null ? (t.ekZuTief ? 9 : t.quote) : null; }
+    case 'score': return r.score_auto !== null && r.score_auto !== undefined ? Number(r.score_auto) : null;
+    case 'bewertung': return r.score_gesamt;
+    case 'tragbar': { const t = tragbarkeit(r.preis_chf, ctx.h, null, ctx.ek); return t !== null && t.quote !== null ? (t.ekZuTief ? 9 : t.quote) : null; }
     case 'pendeln': { if (ctx.me === null) { return null; } const pz = r.pendelzeiten[ctx.me]; return pz ? pz.minuten : null; }
     case 'ort': return r.ort + ' ' + (r.adresse || '');
     case 'zimmer': return r.zimmer !== null ? Number(r.zimmer) : null;
@@ -57,23 +60,11 @@ function sortieren(rows: ObjektUebersicht[], s: Sortierung, ctx: SortCtx): Objek
   });
 }
 
-function lesen(): Sortierung {
-  try {
-    const raw = window.localStorage.getItem('rs.sort');
-    if (raw !== null) { return JSON.parse(raw) as Sortierung; }
-  } catch { /* egal */ }
-  return STANDARD;
-}
-
 export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
-  const { profiles, haushalt, me, budgetPosten } = useApp();
-  const ctx: SortCtx = { h: haushalt, me: me !== null ? me.id : null, profiles, posten: budgetPosten };
-  const [sort, setSortState] = useState<Sortierung>(lesen);
-
-  function setSort(s: Sortierung) {
-    setSortState(s);
-    try { window.localStorage.setItem('rs.sort', JSON.stringify(s)); } catch { /* egal */ }
-  }
+  const { profiles, haushalt, me, budgetPosten, leser } = useApp();
+  const ctx: SortCtx = { h: haushalt, me: me !== null ? me.id : null, profiles, posten: budgetPosten, ek: eigenkapital(haushalt, profiles).total };
+  // Die Liste startet immer mit den neusten Inseraten zuoberst; eine andere Sortierung gilt nur, bis die Seite neu geladen wird.
+  const [sort, setSort] = useState<Sortierung>(STANDARD);
 
   function klick(key: string) {
     if (sort.key === key) { setSort({ key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }); }
@@ -85,6 +76,8 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
 
   const sortiert = sortieren(rows, sort, ctx);
   const neuFuerMich = (r: ObjektUebersicht): boolean => me !== null && r.letzte_aktivitaet_user !== null && r.letzte_aktivitaet_user !== me.id && r.letzte_aktivitaet_am !== null && (r.mein_besuch_am === null || r.letzte_aktivitaet_am > r.mein_besuch_am);
+  /** Noch nie von mir geöffnet: bläulich hinterlegt, bis ich das Inserat einmal aufgerufen habe. */
+  const ungelesen = (r: ObjektUebersicht): boolean => me !== null && !leser && r.mein_besuch_am === null;
   const meinePendel = (r: ObjektUebersicht) => (me !== null && r.pendelzeiten[me.id] ? r.pendelzeiten[me.id] : null);
 
   const spalten: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean }[] = [
@@ -99,7 +92,8 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
     { key: 'pendeln', label: 'ÖV', titel: 'Pendelzeit zu meinem Arbeitsort', r: true },
     { key: 'budget', label: 'Budget', titel: 'Budget-Überschuss pro Monat', r: true },
     { key: 'stufe', label: 'Pipeline' },
-    { key: 'score', label: 'Score', r: true },
+    { key: 'score', label: 'Score', titel: 'Automatischer Score 0 bis 100 (objektive Faktoren), Erklärung beim Überfahren', r: true },
+    { key: 'bewertung', label: 'Bew.', titel: 'Gemeinsame Objektbewertung 1 bis 5 (gewichtete Kriterien beider Personen)', r: true },
     ...profiles.map((p) => ({ key: 'p:' + p.id, label: <span className="avatar sm th-avatar" style={{ background: p.farbe }}>{p.kuerzel}</span>, titel: 'Sterne ' + p.name })),
     { key: 'tage', label: 'Tage', titel: 'Tage am Markt', r: true },
     { key: 'erfasst', label: 'Erfasst', breit: true },
@@ -130,7 +124,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
   );
 
   const kennzahlChips = (r: ObjektUebersicht) => {
-    const t = tragbarkeit(r.preis_chf, haushalt);
+    const t = tragbarkeit(r.preis_chf, haushalt, null, ctx.ek);
     const pz = meinePendel(r);
     return (
       <>
@@ -139,8 +133,9 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
         <span className={'chip ' + (r.tage_am_markt > 90 ? 'warm' : 'neutral')} title="Tage am Markt">{r.tage_am_markt} Tage</span>
         {t !== null && t.quote !== null ? <span className="chip neutral" style={{ color: stufeFarbe(t.stufe), fontWeight: 700 }} title="Tragbarkeit">{t.ekZuTief ? 'EK zu tief' : 'Tragbarkeit ' + quoteText(t)}</span> : null}
         {pz !== null ? <span className="chip neutral" title={'ÖV ab ' + (pz.von || '')}>🚆 {pz.minuten} Min</span> : null}
-        {(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten); return b.vollstaendig ? <span className="chip neutral" style={{ color: ueberschussFarbe(b), fontWeight: 700 }} title="Budget-Überschuss pro Monat mit Standardwerten">{b.ueberschuss < 0 ? '−' : '+'}{chf(Math.abs(b.ueberschuss))}/Mt</span> : null; })()}
-        {r.score_gesamt !== null ? <span className="chip neutral" title="Kriterien-Score">Score {Number(r.score_gesamt).toFixed(1)}</span> : null}
+        {(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten, null, gemeindeAusZeile(r)); return b.vollstaendig ? <span className="chip neutral" style={{ color: ueberschussFarbe(b), fontWeight: 700 }} title="Budget-Überschuss pro Monat mit Standardwerten">{b.ueberschuss < 0 ? '−' : '+'}{chf(Math.abs(b.ueberschuss))}/Mt</span> : null; })()}
+        <ScoreBadge score={r.score_auto} detail={r.score_auto_detail} className="chip neutral" style={{ gap: 6, fontWeight: 700 }} />
+        {r.score_gesamt !== null ? <span className="chip neutral" title="Gemeinsame Objektbewertung (gewichtete Kriterien)">Bewertung {Number(r.score_gesamt).toFixed(1)}</span> : null}
       </>
     );
   };
@@ -161,7 +156,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
       <div className="mob sort-mob">
         <label htmlFor="sort-mob" className="small muted">Sortieren</label>
         <select id="sort-mob" className="select" value={sort.key} onChange={(e) => klick(e.target.value)}>
-          {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Bewertung ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.key === 'budget' ? 'Budget-Überschuss' : s.key === 'ampel' ? 'Einschätzung' : s.label}</option>)}
+          {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Sterne ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.key === 'budget' ? 'Budget-Überschuss' : s.key === 'ampel' ? 'Einschätzung' : s.key === 'score' ? 'Score (automatisch)' : s.key === 'bewertung' ? 'Objektbewertung' : s.label}</option>)}
         </select>
         <button type="button" className="btn sm" onClick={() => setSort({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })} aria-label={sort.dir === 'asc' ? 'Aufsteigend, umkehren' : 'Absteigend, umkehren'}>
           {sort.dir === 'asc' ? '▲ auf' : '▼ ab'}
@@ -171,7 +166,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
         {sortiert.map((r) => {
           const phase = r.stufe_phase === 9 ? 0 : r.stufe_phase;
           return (
-            <div key={r.id} className={'obj-karte' + (r.stufe_phase === 9 ? ' aus' : '')}>
+            <div key={r.id} className={'obj-karte' + (r.stufe_phase === 9 ? ' aus' : '') + (ungelesen(r) ? ' ungelesen' : '')}>
               <Link to={'/inserate/' + r.id} className="obj-karte-link">
                 <ObjektBild o={r} className="karte-bild" />
                 <div className="obj-karte-text">
@@ -214,7 +209,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
               const sub = [typLabel(r.typ), r.adresse].filter((x) => x !== null && x !== '').join(' · ');
               const steuer = r.steuerfuss !== null ? (r.gemeinde !== null && r.gemeinde !== r.ort ? r.gemeinde + ' · ' : '') + 'Steuerfuss ' + r.steuerfuss + ' %' : null;
               return (
-                <tr key={r.id} className={r.stufe_phase === 9 ? 'aus' : undefined}>
+                <tr key={r.id} className={[r.stufe_phase === 9 ? 'aus' : '', ungelesen(r) ? 'ungelesen' : ''].join(' ').trim() || undefined} title={ungelesen(r) ? 'Noch nicht geöffnet' : undefined}>
                   <td className="ampel-zelle">{(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <AmpelInfo ampel={a} className="ampel-trigger"><span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe], marginRight: 0 }} /></AmpelInfo>; })()}</td>
                   <td>
                     <Link to={'/inserate/' + r.id} className="obj" style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -236,9 +231,9 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                   </td>
                   <td className="r" style={{ color: 'var(--ink-2)' }}>{r.preis_chf !== null && r.flaeche_m2 ? chf(r.preis_chf / r.flaeche_m2) : '–'}</td>
                   <td><div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{quellenChips(r)}</div></td>
-                  <td className="r tnum">{(() => { const t = tragbarkeit(r.preis_chf, haushalt); if (t === null || (t.quote === null && !t.ekZuTief)) { return <span className="muted">–</span>; } return <span style={{ color: stufeFarbe(t.stufe), fontWeight: 600 }} title={'Kosten/Jahr CHF ' + chf(t.kosten) + (t.ekZuTief ? ' · Belehnung ' + (t.belehnung * 100).toFixed(0) + ' %' : '')}>{t.ekZuTief ? 'EK' : quoteText(t)}</span>; })()}</td>
+                  <td className="r tnum">{(() => { const t = tragbarkeit(r.preis_chf, haushalt, null, ctx.ek); if (t === null || (t.quote === null && !t.ekZuTief)) { return <span className="muted">–</span>; } return <span style={{ color: stufeFarbe(t.stufe), fontWeight: 600 }} title={'Kosten/Jahr CHF ' + chf(t.kosten) + (t.ekZuTief ? ' · Belehnung ' + (t.belehnung * 100).toFixed(0) + ' %' : '')}>{t.ekZuTief ? 'EK' : quoteText(t)}</span>; })()}</td>
                   <td className="r tnum">{(() => { const pz = meinePendel(r); return pz !== null ? <span title={'ab ' + (pz.von || '') + ' nach ' + (pz.nach || '')}>{pz.minuten}'</span> : <span className="muted">–</span>; })()}</td>
-                  <td className="r tnum">{(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten); return b.vollstaendig ? <span style={{ color: ueberschussFarbe(b), fontWeight: 600 }} title={'Einkommen ' + chf(b.einkommen) + ' − Wohnen ' + chf(b.wohnen.total) + ' − Ausgaben ' + chf(b.ausgabenTotal)}>{b.ueberschuss < 0 ? '−' : ''}{chf(Math.abs(b.ueberschuss))}</span> : <span className="muted">–</span>; })()}</td>
+                  <td className="r tnum">{(() => { const b = budget(r.preis_chf, haushalt, profiles, budgetPosten, null, gemeindeAusZeile(r)); return b.vollstaendig ? <span style={{ color: ueberschussFarbe(b), fontWeight: 600 }} title={'Einkommen ' + chf(b.einkommen) + ' − Wohnen ' + chf(b.wohnen.total) + ' − Ausgaben ' + chf(b.ausgabenTotal)}>{b.ueberschuss < 0 ? '−' : ''}{chf(Math.abs(b.ueberschuss))}</span> : <span className="muted">–</span>; })()}</td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 130 }}>
                       <span className="small" style={{ fontWeight: 500 }}>{r.stufe_name}{neuFuerMich(r) ? <span className="chip accent" style={{ marginLeft: 6 }}>💬 neu</span> : null}</span>
@@ -247,7 +242,8 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                       </div>
                     </div>
                   </td>
-                  <td className="r tnum">{r.score_gesamt !== null ? <span style={{ fontWeight: 600 }}>{Number(r.score_gesamt).toFixed(1)}</span> : <span className="muted">–</span>}</td>
+                  <td className="r tnum"><ScoreBadge score={r.score_auto} detail={r.score_auto_detail} className="score-trigger" /></td>
+                  <td className="r tnum">{r.score_gesamt !== null ? <span style={{ fontWeight: 600 }} title={'Gemeinsame Objektbewertung · ' + profiles.map((p) => p.kuerzel + ' ' + (r.kriterien_scores[p.id] !== undefined ? Number(r.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · ')}>{Number(r.score_gesamt).toFixed(1)}</span> : <span className="muted">–</span>}</td>
                   {profiles.map((p) => {
                     const b = r.bewertungen[p.id];
                     return <td key={p.id}><StarsText n={b ? b.sterne : 0} color={p.farbe} /></td>;

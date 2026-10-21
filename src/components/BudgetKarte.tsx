@@ -4,6 +4,30 @@ import { useApp } from '../state/AppContext';
 import { budget, ueberschussFarbe } from '../lib/budget';
 import { chf } from '../lib/format';
 import type { Gemeinde, ObjektBudgetDaten } from '../lib/types';
+import type { SteuerSchaetzung } from '../lib/steuern';
+import HoverPop from './HoverPop';
+
+/** Erklärung der groben Steuerschätzung beim Überfahren. */
+function SteuerInfo({ s }: { s: SteuerSchaetzung }) {
+  const inhalt = (
+    <>
+      <div className="ampel-pop-kopf"><strong>Steuern geschätzt: CHF {chf(s.total)} pro Jahr</strong><span className="xs muted" style={{ marginLeft: 'auto' }}>{s.gemeinde} {s.kanton}</span></div>
+      <table className="fin-tabelle" style={{ marginTop: 6 }}>
+        <tbody>
+          <tr><td>Einkommen <span className="xs muted">Nettolöhne nach Pensum + weitere Einkünfte, {s.personen} erwerbstätig, {s.kinder} Kinder</span></td><td className="r">{chf(s.einkommen)}</td></tr>
+          <tr><td>Steuerbar Kanton <span className="xs muted">nach Pauschalabzügen (Berufskosten, 3a, Versicherungen, Kinder, Zweiverdiener)</span></td><td className="r">{chf(s.steuerbarKanton)}</td></tr>
+          <tr><td>Einfache Steuer {s.kanton} <span className="xs muted">Verheiratetentarif 2026</span></td><td className="r">{chf(s.einfacheSteuer)}</td></tr>
+          <tr><td>× Steuerfuss gesamt <span className="xs muted">Kanton + Bezirk + Gemeinde, ohne Kirche</span></td><td className="r">{s.steuerfussGesamt} %</td></tr>
+          <tr className="fin-summe"><td>Kanton und Gemeinde</td><td className="r">{chf(s.kantonGemeinde)}</td></tr>
+          <tr><td>Direkte Bundessteuer <span className="xs muted">auf {chf(s.steuerbarBund)} steuerbar, abzüglich 263 pro Kind</span></td><td className="r">{chf(s.bund)}</td></tr>
+          <tr className="fin-summe"><td>Total pro Jahr / pro Monat</td><td className="r">{chf(s.total)} / {chf(s.monat)}</td></tr>
+        </tbody>
+      </table>
+      <div className="xs muted ampel-pop-fuss">Grobe Schätzung ohne Eigenmietwert, Schuldzinsen, Unterhalt, Vermögenssteuer und Kirchensteuer. Kinder und Nettolöhne unter Einstellungen. Betrag hier pro Objekt überschreibbar.</div>
+    </>
+  );
+  return <HoverPop inhalt={inhalt} label="Steuerschätzung anzeigen" className="xs" style={{ color: 'var(--accent)', fontWeight: 600, cursor: 'help' }} breite={520}>geschätzt für {s.gemeinde} ⓘ</HoverPop>;
+}
 
 function Betrag({ wert, onChange, breit, aria }: { wert: number; onChange: (v: number) => void; breit?: boolean; aria: string }) {
   const [text, setText] = useState(String(wert));
@@ -26,7 +50,8 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
   const [extraBetrag, setExtraBetrag] = useState('');
 
   if (daten === null) { return <div className="small muted">Lade Budget …</div>; }
-  const b = budget(preis, haushalt, profiles, budgetPosten, daten);
+  const gs = gemeinde !== null ? { name: gemeinde.name, kanton: gemeinde.kanton, steuerfuss: gemeinde.steuerfuss, steuerfuss_kanton: gemeinde.steuerfuss_kanton !== undefined ? gemeinde.steuerfuss_kanton : null, steuerfuss_bezirk: gemeinde.steuerfuss_bezirk !== undefined ? gemeinde.steuerfuss_bezirk : null } : null;
+  const b = budget(preis, haushalt, profiles, budgetPosten, daten, gs);
   const ov = daten;
   const istStandard = Object.keys(ov).length === 0;
   const steuerText = gemeinde !== null && gemeinde.steuerfuss !== null ? 'Steuerfuss ' + gemeinde.name + ' ' + gemeinde.steuerfuss + ' %' + (gemeinde.steuerfuss_jahr ? ' (' + gemeinde.steuerfuss_jahr + ')' : '') : null;
@@ -90,7 +115,7 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
 
       <div className="budget-block">
         <div className="budget-kopf"><span>Wohnkosten dieses Objekts</span><span className="tnum">− CHF {chf(b.wohnen.total)}</span></div>
-        <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)}{leser ? '' : ' · Zins oben bei «Finanzierung» anpassbar'}</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
+        <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)} (Eigenkapital {chf(b.ek.total)}){leser ? '' : ' · Zins und Eigenkapital bei «Finanzierung» anpassbar'}</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
         <div className="budget-zeile"><span>Nebenkosten, Unterhalt <span className="xs muted">{haushalt.nebenkosten_pct} % vom Preis</span></span><span /><span className="tnum">{chf(b.wohnen.nebenkosten)}</span></div>
         <div className="budget-zeile"><span>Amortisation 2. Hypothek <span className="xs muted">auf 65 % in {haushalt.amortisation_jahre} Jahren</span></span><span /><span className="tnum">{chf(b.wohnen.amortisation)}</span></div>
       </div>
@@ -99,11 +124,11 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
         <div className="budget-kopf"><span>Ausgaben</span><span className="tnum">− CHF {chf(b.ausgabenTotal)}</span></div>
         {b.ausgaben.map((z, i) => (
           <div key={z.id} className="budget-zeile">
-            <span>{z.name}{z.ueberschrieben && z.id.indexOf('extra-') !== 0 ? <span className="xs muted"> · Standard {chf(z.standard)}</span> : null}{steuerText !== null && /steuer/i.test(z.name) ? <span className="xs muted"> · {steuerText}, Betrag für diese Gemeinde hier anpassen</span> : null}</span>
+            <span>{z.name}{z.ueberschrieben && z.id.indexOf('extra-') !== 0 ? <span className="xs muted"> · {z.geschaetzt || (b.steuer !== null && /steuer/i.test(z.name)) ? 'Schätzung' : 'Standard'} {chf(z.standard)}</span> : null}{z.geschaetzt && b.steuer !== null ? <> · <SteuerInfo s={b.steuer} /></> : null}{steuerText !== null && /steuer/i.test(z.name) && b.steuer === null ? <span className="xs muted"> · {steuerText}, Betrag für diese Gemeinde hier anpassen</span> : null}</span>
             <span className="budget-pensum">
               {leser ? null : z.id.indexOf('extra-') === 0
                 ? <button type="button" className="linkbtn xs" onClick={() => setExtra(Number(z.id.slice(6)), null)} title="Entfernen">✕</button>
-                : (z.ueberschrieben ? <button type="button" className="linkbtn xs" onClick={() => setPosten(z.id, z.standard)} title="Zurück auf Standard">↺</button> : null)}
+                : (z.ueberschrieben ? <button type="button" className="linkbtn xs" onClick={() => setPosten(z.id, z.standard)} title={b.steuer !== null && /steuer/i.test(z.name) ? 'Zurück auf die Schätzung' : 'Zurück auf Standard'}>↺</button> : null)}
             </span>
             {leser ? <span className="tnum">{chf(z.betrag)}</span> : <Betrag wert={z.betrag} breit aria={z.name} onChange={(v) => (z.id.indexOf('extra-') === 0 ? setExtra(i - budgetPosten.length, v) : setPosten(z.id, v))} />}
           </div>
