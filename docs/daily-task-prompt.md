@@ -35,6 +35,8 @@ Also call it for every listing that is already in the database (see the state qu
 - The function returns the objekt uuid. It updates zuletzt_gesehen, the price and the URL for known listings (price changes are recorded automatically as snapshots), merges the same object across agencies, and creates new objects otherwise.
 GALLERY PHOTOS: for every NEW object (and for known objects that have no rows in public.objekt_bilder yet), store up to 5 gallery photo URLs from the detail page, in page order (absolute https, property photos only, no logos/portraits/maps):
   select public.bilder_hinzufuegen('<objekt uuid>'::uuid, array['https://…1.jpg','https://…2.jpg']);
+BAUJAHR AND HEIZUNG: for every NEW object, if the detail page states the construction year and/or the heating system, store them (both feed the automatic score 0-100; never guess):
+  update public.objekte set baujahr = coalesce(baujahr, <jahr>), heizung = coalesce(heizung, '<Wärmepumpe|Erdsonde|Fernwärme|Pellets|Gas|Öl|Elektro|…>') where id = '<objekt uuid>';
 MONEYPARK ORIGINAL PORTAL: MoneyPark mirrors listings from Homegate, ImmoScout24, newhome, immobilier.ch, RealAdvisor, icasa, Flatfox, Properstar. Its API record (GET https://app.moneypark.ch/mpre-search-api/pub/v1/property/<id>/ from inside the page via javascript_tool; trailing slash required; fields: id, images[] (plain URLs), image, url = original portal detail page, title, address{city,street,houseNumber,postCode}, rooms, area, price, propertyType, buildingYear, landArea, daysOnMarket, isActive) gives the original portal URL. For each MoneyPark object store it as a mirrored source (portal name e.g. 'Homegate', portal listing id from the URL):
   select public.spiegel_quelle('<objekt uuid>'::uuid, '<Portal>', '<original detail url>', 'MoneyPark', '<portal id>');
 Mirrored sources follow the MoneyPark status automatically (markiere_offline and upsert_inserat handle spiegel_von).
@@ -42,7 +44,7 @@ Then, ONLY for every agency you checked completely (all pages read), mark listin
   select public.markiere_offline('<makler>', current_date);
 This sets every listing of that agency that was NOT seen in today's run to offline, with offline_seit = today (the app shows "Offline genommen seit <Datum>" and moves the object to "Vom Markt"). If a listing reappears later, upsert_inserat sets it active again automatically. Do NOT call markiere_offline for an agency you could not check completely (browser failure, partial pagination, filter not applied), otherwise listings would be wrongly marked offline.
 After all agencies: copy new photos into the app's storage and refresh commute times (both are asynchronous, just call them once):
-  select public.bilder_sichern(); select public.pendelzeiten_berechnen();
+  select public.bilder_sichern(); select public.pendelzeiten_berechnen(); select public.scores_berechnen();
 Finally write one row per agency into the run log, e.g.:
   insert into public.lauf_protokoll (makler, geprueft, anzahl_inserate, neue, geaendert, fehler, beendet_am) values ('Walde', true, 142, 1, 0, null, now());
 (geprueft=false and fehler=<short text> if the site could not be read.)
