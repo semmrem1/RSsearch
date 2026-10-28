@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { chf, dateLong, dateShort } from '../lib/format';
 import TeilenButton from '../components/TeilenButton';
-import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauEreignis, NeubauPhase, Neubauprojekt, RadarGemeinde } from '../lib/types';
+import { ScoreBadge } from '../components/ScoreInfo';
+import { StarsInput, StarsText } from '../components/Stars';
+import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauBewertung, NeubauEreignis, NeubauPhase, Neubauprojekt, Profile, RadarGemeinde } from '../lib/types';
 
 type Tab = 'projekte' | 'baugesuche' | 'gemeinden';
 type EinFilter = 'relevant' | 'fokus' | 'pruefen' | 'ausgeblendet';
@@ -138,9 +140,41 @@ function ProjektModal({ start, gemeinden, onClose, onSaved }: { start: Partial<N
   );
 }
 
+const CLAUDE_FUSS = 'Einschätzung von Claude nach euren Kriterien: Budget bis CHF 2.5 Mio. (25), Zimmer mit 5.5 Zi ideal (12), Fläche ab 115 m² (13), Typ mit Haus leicht bevorzugt (10), Lage der Gemeinde (20), Phase (20). Wird bei jeder Änderung am Projekt neu gerechnet.';
+
+// ---------- Bewertung auf der Karte: Claude-Score und Sterne pro Person ----------
+function ProjektBewertung({ p, profiles, meId, leser, bewertungen, onSterne }: {
+  p: Neubauprojekt; profiles: Profile[]; meId: string | null; leser: boolean; bewertungen: NeubauBewertung[]; onSterne: (n: number) => void;
+}) {
+  const score = p.claude_score !== undefined ? p.claude_score : null;
+  const detail = p.claude_score_detail !== undefined ? p.claude_score_detail : null;
+  return (
+    <div className="radar-bewertung">
+      <div className="radar-bewertung-feld">
+        <span className="xs muted">Passt zu uns</span>
+        <ScoreBadge score={score} detail={detail} titel="Claude" fuss={CLAUDE_FUSS} className="score-trigger" />
+      </div>
+      {profiles.map((pr) => {
+        const b = bewertungen.find((x) => x.user_id === pr.id);
+        const n = b !== undefined ? b.sterne : 0;
+        const ich = meId !== null && meId === pr.id && !leser;
+        return (
+          <div key={pr.id} className="radar-bewertung-feld">
+            <span className="xs" style={{ color: pr.farbe, fontWeight: 600 }}>{pr.name.split(' ')[0]}{ich ? ' (ich)' : ''}</span>
+            {ich
+              ? <StarsInput value={n} onChange={onSterne} color={pr.farbe} kompakt label={'Meine Sterne für ' + p.name} />
+              : <span className="radar-sterne-text" aria-label={n > 0 ? n + ' von 5 Sternen' : 'Noch nicht bewertet'}>{n > 0 ? <StarsText n={n} color={pr.farbe} /> : <span className="small muted">noch offen</span>}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------- Projektkarte ----------
-function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, onEdit, onPhase, onInteressent }: {
+function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, profiles, meId, bewertungen, onSterne, onEdit, onPhase, onInteressent }: {
   p: Neubauprojekt; gesuche: Baugesuch[]; ereignisse: NeubauEreignis[]; inserate: ProjektInserat[]; leser: boolean; hervorgehoben: boolean;
+  profiles: Profile[]; meId: string | null; bewertungen: NeubauBewertung[]; onSterne: (n: number) => void;
   onEdit: () => void; onPhase: (ph: NeubauPhase) => void; onInteressent: () => void;
 }) {
   const [offen, setOffen] = useState(false);
@@ -170,6 +204,7 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
           <TeilenButton className="btn sm" nurIcon inhalt={teilenInhalt} />
         </div>
       </div>
+      <ProjektBewertung p={p} profiles={profiles} meId={meId} leser={leser} bewertungen={bewertungen} onSterne={onSterne} />
       <dl className="radar-fakten">
         {p.typ ? <div><dt>Typ</dt><dd>{p.typ}{p.einheiten !== null ? ', ' + p.einheiten + ' Einheiten' : ''}</dd></div> : null}
         {zimmer !== '' ? <div><dt>Zimmer</dt><dd className="tnum">{zimmer}</dd></div> : null}
@@ -223,7 +258,7 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
 
 // ---------- Seite ----------
 export default function Radar() {
-  const { leser } = useApp();
+  const { leser, profiles, me } = useApp();
   const [params, setParams] = useSearchParams();
   // Geteilte Links: /radar?projekt=<id> oder /radar?gesuch=<id>
   const geteiltProjekt = params.get('projekt');
@@ -238,6 +273,7 @@ export default function Radar() {
   const [ereignisse, setEreignisse] = useState<NeubauEreignis[]>([]);
   const [gemeinden, setGemeinden] = useState<RadarGemeinde[]>([]);
   const [inserate, setInserate] = useState<ProjektInserat[]>([]);
+  const [bewertungen, setBewertungen] = useState<NeubauBewertung[]>([]);
   const [laden, setLaden] = useState(true);
   const [ein, setEin] = useState<EinFilter>('relevant');
   const [kat, setKat] = useState<string>('');
@@ -255,13 +291,15 @@ export default function Radar() {
   useEffect(() => { try { localStorage.setItem('radar-tab', tab); } catch { /* egal */ } }, [tab]);
 
   async function laden_() {
-    const [p, g, e, gm, o] = await Promise.all([
+    const [p, g, e, gm, o, bw] = await Promise.all([
       supabase.from('neubauprojekte').select('*').order('aktualisiert_am', { ascending: false }),
       supabase.from('baugesuche').select('*').order('publiziert_am', { ascending: false }).limit(3000),
       supabase.from('neubau_ereignisse').select('*').order('datum', { ascending: false }).limit(2000),
       supabase.from('radar_gemeinden').select('*').order('kanton').order('name'),
       supabase.from('objekte').select('id, zimmer, flaeche_m2, preis_chf, markt_status, neubauprojekt_id').not('neubauprojekt_id', 'is', null).is('zusammengefuehrt_in', null).order('preis_chf'),
+      supabase.from('neubau_bewertungen').select('*'),
     ]);
+    if (bw.data) { setBewertungen(bw.data as NeubauBewertung[]); }
     if (o.data) { setInserate(o.data as ProjektInserat[]); }
     if (p.data) { setProjekte(p.data as Neubauprojekt[]); }
     if (g.data) { setGesuche(g.data as Baugesuch[]); }
@@ -349,6 +387,14 @@ export default function Radar() {
     if (b.status === 'irrelevant' && e !== 'irrelevant') { patch.status = 'neu'; }
     const { error } = await supabase.from('baugesuche').update(patch).eq('id', b.id);
     if (error) { setMeldung(error.message); laden_(); }
+  }
+  async function sterneSetzen(p: Neubauprojekt, n: number) {
+    if (me === null || leser) { return; }
+    const jetzt = new Date().toISOString();
+    const neu: NeubauBewertung = { neubauprojekt_id: p.id, user_id: me.id, sterne: n, aktualisiert_am: jetzt };
+    setBewertungen((xs) => [...xs.filter((x) => !(x.neubauprojekt_id === p.id && x.user_id === me.id)), neu]);
+    const { error } = await supabase.from('neubau_bewertungen').upsert(neu, { onConflict: 'neubauprojekt_id,user_id' });
+    if (error) { setMeldung('Bewertung nicht gespeichert: ' + error.message); laden_(); }
   }
   async function phaseSetzen(p: Neubauprojekt, ph: NeubauPhase) {
     const { error } = await supabase.rpc('neubauprojekt_melden', { p: { id: p.id, phase: ph } });
@@ -442,6 +488,8 @@ export default function Radar() {
                       gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
                       ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
                       inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
+                      profiles={profiles} meId={me !== null ? me.id : null}
+                      bewertungen={bewertungen.filter((b) => b.neubauprojekt_id === p.id)} onSterne={(n) => sterneSetzen(p, n)}
                       onEdit={() => setModal({ start: { ...p }, gesuchId: null })}
                       onPhase={(x) => phaseSetzen(p, x)} onInteressent={() => vorgemerkt(p)} />
                   ))}
@@ -460,6 +508,8 @@ export default function Radar() {
                       gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
                       ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
                       inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
+                      profiles={profiles} meId={me !== null ? me.id : null}
+                      bewertungen={bewertungen.filter((b) => b.neubauprojekt_id === p.id)} onSterne={(n) => sterneSetzen(p, n)}
                       onEdit={() => setModal({ start: { ...p }, gesuchId: null })}
                       onPhase={(x) => phaseSetzen(p, x)} onInteressent={() => vorgemerkt(p)} />
                   ))}

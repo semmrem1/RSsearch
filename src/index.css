@@ -564,3 +564,10 @@ table.list th.sterne-spalte .th-sort { justify-content: center; }
   /* Auf dem Handy grössere Tippflächen */
   .obj-karte-sterne .star-btns.kompakt button { font-size: 24px; min-width: 32px; padding: 4px 2px; }
 }
+/* Neubau-Radar: Claude-Score und Sterne pro Person auf der Projektkarte */
+.radar-bewertung { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 22px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--col-bg); border: 1px solid var(--line-soft); }
+.radar-bewertung-feld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.radar-bewertung-feld > .xs { line-height: 16px; }
+.radar-bewertung .star-btns, .radar-bewertung .score-trigger { min-height: 30px; align-items: center; }
+.radar-bewertung .star-btns button { font-size: 20px; padding: 2px 1px; min-width: 24px; }
+.radar-sterne-text { display: inline-flex; align-items: center; min-height: 30px; font-size: 18px; }
