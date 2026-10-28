@@ -26,9 +26,9 @@ export default function Inserate() {
         </div>
         {!leser ? <button type="button" className="btn primary" onClick={() => setShowForm(true)}>+ Inserat manuell erfassen</button> : null}
       </div>
-      <section className="card">
+      <section className="card liste-voll">
         <FilterBar objekte={objekte} wert={filter} onChange={setFilter} treffer={rows.length} />
-        {loading ? <div className="empty">Lade …</div> : <ObjektTable rows={rows} />}
+        {loading ? <div className="empty">Lade …</div> : <ObjektTable rows={rows} onBewertet={reload} />}
       </section>
       {showForm ? <ObjektForm onClose={() => setShowForm(false)} onSaved={(id) => { setShowForm(false); reload(); nav('/inserate/' + id); }} /> : null}
     </>

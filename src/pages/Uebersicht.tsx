@@ -146,13 +146,13 @@ export default function Uebersicht() {
         </section>
       ) : null}
 
-      <section className="card" aria-labelledby="list-h">
+      <section className="card liste-voll" aria-labelledby="list-h">
         <div className="card-head list-head">
           <h2 id="list-h">Alle Inserate</h2>
           <span className="small muted">Spaltentitel antippen zum Sortieren</span>
         </div>
         <FilterBar objekte={objekte} wert={filter} onChange={setFilter} treffer={filtered.length} />
-        {loading ? <div className="empty">Lade …</div> : <ObjektTable rows={filtered} />}
+        {loading ? <div className="empty">Lade …</div> : <ObjektTable rows={filtered} onBewertet={reload} />}
       </section>
 
       {showForm ? <ObjektForm onClose={() => setShowForm(false)} onSaved={(id) => { setShowForm(false); reload(); nav('/inserate/' + id); }} /> : null}

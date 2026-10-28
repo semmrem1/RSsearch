@@ -529,3 +529,38 @@ table.list tr.ungelesen td:first-child { box-shadow: inset 3px 0 0 var(--accent)
 .gewicht-btn { min-width: 30px; height: 30px; border: 1px solid var(--line-strong); background: #fff; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink-2); }
 .gewicht-btn.on { color: #fff; }
 .gewicht-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Inserate-Liste: volle Bildschirmbreite nutzen (Seiten mit .liste-voll) */
+main:has(.liste-voll) { max-width: none; }
+body:has(.liste-voll) .app-header .inner { max-width: none; }
+@media (min-width: 1900px) {
+  .liste-voll table.list td { padding-left: 10px; padding-right: 10px; }
+  .liste-voll table.list th .th-sort { padding-left: 10px; padding-right: 10px; }
+  .liste-voll .objbild.thumb { width: 88px; height: 64px; flex-basis: 88px; }
+}
+
+/* Sterne direkt in der Liste vergeben */
+.star-btns.kompakt { gap: 0; flex-wrap: nowrap; }
+.star-btns.kompakt button { font-size: 17px; padding: 2px 0; min-width: 18px; border-radius: 4px; cursor: pointer; }
+table.list td.sterne-zelle .stars { font-size: 15px; letter-spacing: 0.5px; line-height: 26px; }
+table.list td.objekt-zelle { min-width: 210px; }
+@media (max-width: 1540px) {
+  .star-btns.kompakt button { font-size: 14px; min-width: 14px; padding: 2px 0; }
+  table.list td.sterne-zelle .stars { font-size: 12px; letter-spacing: 0; line-height: 22px; }
+  table.list td.sterne-zelle, table.list th.sterne-spalte .th-sort { padding-left: 3px; padding-right: 3px; }
+}
+.star-btns.kompakt button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) {
+  /* Vorschau: alle Sterne bis zum überfahrenen einfärben */
+  .star-btns.kompakt:hover button { color: var(--stern) !important; }
+  .star-btns.kompakt button:hover ~ button { color: var(--line-strong) !important; }
+}
+table.list td.sterne-zelle { padding-top: 9px; white-space: nowrap; }
+table.list th.sterne-spalte .th-sort { justify-content: center; }
+.obj-karte-sterne { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.obj-karte-person { display: inline-flex; align-items: center; gap: 6px; }
+.obj-karte-person .stars { font-size: 18px; }
+@media (max-width: 720px) {
+  /* Auf dem Handy grössere Tippflächen */
+  .obj-karte-sterne .star-btns.kompakt button { font-size: 24px; min-width: 32px; padding: 4px 2px; }
+}

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import type { ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, typLabel, marktText } from '../lib/format';
 import { useApp } from '../state/AppContext';
-import { StarsText } from './Stars';
+import { StarsInput, StarsText } from './Stars';
+import { supabase } from '../lib/supabase';
 import ObjektBild from './ObjektBild';
 import { quelleDirekt } from '../lib/links';
 import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
@@ -60,11 +61,42 @@ function sortieren(rows: ObjektUebersicht[], s: Sortierung, ctx: SortCtx): Objek
   });
 }
 
-export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
+export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersicht[]; onBewertet?: () => void }) {
   const { profiles, haushalt, me, budgetPosten, leser } = useApp();
   const ctx: SortCtx = { h: haushalt, me: me !== null ? me.id : null, profiles, posten: budgetPosten, ek: eigenkapital(haushalt, profiles).total };
   // Die Liste startet immer mit den neusten Inseraten zuoberst; eine andere Sortierung gilt nur, bis die Seite neu geladen wird.
   const [sort, setSort] = useState<Sortierung>(STANDARD);
+  // Sterne, die in dieser Liste gesetzt wurden, sofort anzeigen (bis die Daten neu geladen sind)
+  const [lokal, setLokal] = useState<Record<string, number>>({});
+  const [sterneFehler, setSterneFehler] = useState<string | null>(null);
+
+  function sterne(r: ObjektUebersicht, userId: string): number {
+    if (me !== null && userId === me.id && lokal[r.id] !== undefined) { return lokal[r.id]; }
+    const b = r.bewertungen[userId];
+    return b ? b.sterne : 0;
+  }
+
+  /** Eigene Sterne direkt aus der Liste speichern. Nur die Spalte sterne wird geschrieben, Notiz, Tags und Markierungen bleiben. */
+  async function sterneSetzen(r: ObjektUebersicht, n: number) {
+    if (me === null || leser) { return; }
+    const vorher = sterne(r, me.id);
+    setLokal((alt) => ({ ...alt, [r.id]: n }));
+    setSterneFehler(null);
+    const { error } = await supabase.from('bewertungen').upsert({ objekt_id: r.id, user_id: me.id, sterne: n, updated_at: new Date().toISOString() });
+    if (error) {
+      setLokal((alt) => ({ ...alt, [r.id]: vorher }));
+      setSterneFehler('Sterne für ' + r.ort + ' nicht gespeichert: ' + error.message);
+      return;
+    }
+    if (onBewertet) { onBewertet(); }
+  }
+
+  /** Sterne einer Person: die eigenen zum Anklicken, die der anderen Person nur zur Anzeige. */
+  const sterneZelle = (r: ObjektUebersicht, p: Profile) => {
+    const mein = me !== null && p.id === me.id && !leser;
+    if (mein) { return <StarsInput kompakt value={sterne(r, p.id)} onChange={(n) => sterneSetzen(r, n)} color={p.farbe} label={'Meine Sterne für ' + r.ort} />; }
+    return <span title={p.name}><StarsText n={sterne(r, p.id)} color={p.farbe} /></span>;
+  };
 
   function klick(key: string) {
     if (sort.key === key) { setSort({ key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }); }
@@ -80,7 +112,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
   const ungelesen = (r: ObjektUebersicht): boolean => me !== null && !leser && r.mein_besuch_am === null;
   const meinePendel = (r: ObjektUebersicht) => (me !== null && r.pendelzeiten[me.id] ? r.pendelzeiten[me.id] : null);
 
-  const spalten: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean }[] = [
+  const spalten: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean; sterne?: boolean }[] = [
     { key: 'ampel', label: '', titel: 'Einschätzung (Ampel)' },
     { key: 'ort', label: 'Objekt' },
     { key: 'zimmer', label: 'Zi', r: true },
@@ -94,15 +126,15 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
     { key: 'stufe', label: 'Pipeline' },
     { key: 'score', label: 'Score', titel: 'Automatischer Score 0 bis 100 (objektive Faktoren), Erklärung beim Überfahren', r: true },
     { key: 'bewertung', label: 'Bew.', titel: 'Gemeinsame Objektbewertung 1 bis 5 (gewichtete Kriterien beider Personen)', r: true },
-    ...profiles.map((p) => ({ key: 'p:' + p.id, label: <span className="avatar sm th-avatar" style={{ background: p.farbe }}>{p.kuerzel}</span>, titel: 'Sterne ' + p.name })),
+    ...profiles.map((p) => ({ key: 'p:' + p.id, label: <span className="avatar sm th-avatar" style={{ background: p.farbe }}>{p.kuerzel}</span>, titel: 'Sterne ' + p.name + (me !== null && p.id === me.id && !leser ? ' (direkt anklicken zum Bewerten)' : ''), sterne: true })),
     { key: 'tage', label: 'Tage', titel: 'Tage am Markt', r: true },
     { key: 'erfasst', label: 'Erfasst', breit: true },
   ];
 
-  const kopf = (s: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean }) => {
+  const kopf = (s: { key: string; label: ReactNode; titel?: string; r?: boolean; breit?: boolean; sterne?: boolean }) => {
     const aktiv = sort.key === s.key;
     return (
-      <th key={s.key} className={[s.r ? 'r' : '', s.breit ? 'nur-breit' : ''].join(' ').trim() || undefined} aria-sort={aktiv ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <th key={s.key} className={[s.r ? 'r' : '', s.breit ? 'nur-breit' : '', s.sterne ? 'sterne-spalte' : ''].join(' ').trim() || undefined} aria-sort={aktiv ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
         <button type="button" className={'th-sort' + (aktiv ? ' aktiv' : '')} onClick={() => klick(s.key)} title={s.titel}>
           {s.label}<span className="pfeil" aria-hidden="true">{aktiv ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
         </button>
@@ -152,6 +184,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
 
   return (
     <>
+      {sterneFehler !== null ? <div className="notice" role="alert" style={{ margin: '0 22px 12px' }}>{sterneFehler}</div> : null}
       {/* Mobile: Sortierung als Auswahl, Inserate als Karten */}
       <div className="mob sort-mob">
         <label htmlFor="sort-mob" className="small muted">Sortieren</label>
@@ -183,10 +216,14 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                 <div className="progress" aria-label={'Phase ' + phase + ' von 5'} style={{ flex: '1 1 60px', maxWidth: 120 }}>
                   {[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= phase ? 'on' : ''} />)}
                 </div>
-                {profiles.map((p) => {
-                  const b = r.bewertungen[p.id];
-                  return <span key={p.id} className="xs" style={{ color: p.farbe }}>{p.kuerzel} <StarsText n={b ? b.sterne : 0} color={p.farbe} /></span>;
-                })}
+              </div>
+              <div className="obj-karte-sterne">
+                {profiles.map((p) => (
+                  <span key={p.id} className="obj-karte-person">
+                    <span className="avatar sm th-avatar" style={{ background: p.farbe }} title={p.name}>{p.kuerzel}</span>
+                    {sterneZelle(r, p)}
+                  </span>
+                ))}
               </div>
               <div className="obj-karte-kennzahlen">
                 {kennzahlChips(r)}
@@ -211,7 +248,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
               return (
                 <tr key={r.id} className={[r.stufe_phase === 9 ? 'aus' : '', ungelesen(r) ? 'ungelesen' : ''].join(' ').trim() || undefined} title={ungelesen(r) ? 'Noch nicht geöffnet' : undefined}>
                   <td className="ampel-zelle">{(() => { const a = ampel(r, haushalt, profiles, budgetPosten); return <AmpelInfo ampel={a} className="ampel-trigger"><span className="ampel-dot" style={{ background: AMPEL_FARBE[a.stufe], marginRight: 0 }} /></AmpelInfo>; })()}</td>
-                  <td>
+                  <td className="objekt-zelle">
                     <Link to={'/inserate/' + r.id} className="obj" style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                       <ObjektBild o={r} className="thumb" />
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -244,10 +281,7 @@ export default function ObjektTable({ rows }: { rows: ObjektUebersicht[] }) {
                   </td>
                   <td className="r tnum"><ScoreBadge score={r.score_auto} detail={r.score_auto_detail} className="score-trigger" /></td>
                   <td className="r tnum">{r.score_gesamt !== null ? <span style={{ fontWeight: 600 }} title={'Gemeinsame Objektbewertung · ' + profiles.map((p) => p.kuerzel + ' ' + (r.kriterien_scores[p.id] !== undefined ? Number(r.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · ')}>{Number(r.score_gesamt).toFixed(1)}</span> : <span className="muted">–</span>}</td>
-                  {profiles.map((p) => {
-                    const b = r.bewertungen[p.id];
-                    return <td key={p.id}><StarsText n={b ? b.sterne : 0} color={p.farbe} /></td>;
-                  })}
+                  {profiles.map((p) => <td key={p.id} className="sterne-zelle">{sterneZelle(r, p)}</td>)}
                   <td className={'r tnum' + (r.tage_am_markt > 90 ? '' : ' muted')} style={r.tage_am_markt > 90 ? { color: 'var(--warm-dark)', fontWeight: 600 } : undefined}>{r.tage_am_markt}</td>
                   <td className="muted small nur-breit">{dateShort(r.erstmals_gesehen)}</td>
                 </tr>
