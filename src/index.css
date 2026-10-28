@@ -564,3 +564,12 @@ table.list th.sterne-spalte .th-sort { justify-content: center; }
   /* Auf dem Handy grössere Tippflächen */
   .obj-karte-sterne .star-btns.kompakt button { font-size: 24px; min-width: 32px; padding: 4px 2px; }
 }
+
+/* Inserate-Liste: Zeile unter der Maus leicht hervorheben (nur Geräte mit Maus) */
+@media (hover: hover) {
+  table.list.objekte tbody td { transition: background-color .12s ease; }
+  table.list.objekte tbody tr:hover td { background: #F1F4F7; }
+  table.list.objekte tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent-bar); }
+  table.list.objekte tbody tr.ungelesen:hover td { background: #E2ECF5; }
+  table.list.objekte tbody tr.ungelesen:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+}

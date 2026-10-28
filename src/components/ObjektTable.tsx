@@ -236,7 +236,7 @@ export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersic
 
       {/* Desktop: Tabelle */}
       <div className="table-wrap desk">
-        <table className="list">
+        <table className="list objekte">
           <thead>
             <tr>{spalten.map(kopf)}</tr>
           </thead>
