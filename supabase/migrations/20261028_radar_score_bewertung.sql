@@ -122,12 +122,12 @@ begin
     when 'geplant' then 'Erst geplant, Vermarktung offen; Chance, früh dabei zu sein' else 'Von euch als uninteressant markiert' end;
   f := f || jsonb_build_object('name', 'Phase', 'punkte', pts, 'max', 20, 'text', txt); total := total + pts;
 
-  if unbekannt >= 2 then h := h || 'Wenig Angaben, Score vorläufig'; end if;
-  if p.phase = 'uninteressant' then h := h || 'Von euch als uninteressant markiert'; end if;
+  if unbekannt >= 2 then h := array_append(h, 'Wenig Angaben, Score vorläufig'); end if;
+  if p.phase = 'uninteressant' then h := array_append(h, 'Von euch als uninteressant markiert'); end if;
 
   for e in select * from jsonb_array_elements(f) loop
-    if (e->>'punkte')::numeric >= 0.75 * (e->>'max')::numeric then stark := stark || (e->>'name'); end if;
-    if (e->>'punkte')::numeric <= 0.3 * (e->>'max')::numeric then schwach := schwach || (e->>'name'); end if;
+    if (e->>'punkte')::numeric >= 0.75 * (e->>'max')::numeric then stark := array_append(stark, e->>'name'); end if;
+    if (e->>'punkte')::numeric <= 0.3 * (e->>'max')::numeric then schwach := array_append(schwach, e->>'name'); end if;
   end loop;
   fazit := coalesce(p.claude_fazit,
     case when array_length(stark, 1) is not null then 'Stark: ' || array_to_string(stark, ', ') || '.' else '' end
