@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import Karte from '../components/KarteLazy';
+import type { KartenPunkt } from '../components/Karte';
+import { GWR_TEXT, istMehrfamilien, kontaktSinnvoll, schonKontaktiert, zuRadarPunkt } from '../lib/radarkarte';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { chf, dateLong, dateShort } from '../lib/format';
 import TeilenButton from '../components/TeilenButton';
-import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauEreignis, NeubauPhase, Neubauprojekt, RadarGemeinde } from '../lib/types';
+import { ScoreBadge } from '../components/ScoreInfo';
+import { StarsInput, StarsText } from '../components/Stars';
+import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauBewertung, NeubauEreignis, NeubauPhase, Neubauprojekt, Profile, RadarGemeinde } from '../lib/types';
 
-type Tab = 'projekte' | 'baugesuche' | 'gemeinden';
+type Tab = 'projekte' | 'karte' | 'baugesuche' | 'gemeinden';
+type ProjektFilter = 'alle' | 'gemerkt' | 'kontakt';
+type KartenPhase = 'aktiv' | 'geplant' | 'vermarktung';
 type EinFilter = 'relevant' | 'fokus' | 'pruefen' | 'ausgeblendet';
 type StatusFilter = 'offen' | 'beobachten' | 'alle';
 
@@ -138,9 +145,111 @@ function ProjektModal({ start, gemeinden, onClose, onSaved }: { start: Partial<N
   );
 }
 
+const CLAUDE_FUSS = 'Einschätzung von Claude nach euren Kriterien: Budget bis CHF 2.5 Mio. (25), Zimmer mit 5.5 Zi ideal (12), Fläche ab 115 m² (13), Typ mit Haus leicht bevorzugt (10), Lage der Gemeinde (20), Phase (20). Wird bei jeder Änderung am Projekt neu gerechnet.';
+
+// ---------- Bewertung auf der Karte: Claude-Score und Sterne pro Person ----------
+function ProjektBewertung({ p, profiles, meId, leser, bewertungen, onSterne }: {
+  p: Neubauprojekt; profiles: Profile[]; meId: string | null; leser: boolean; bewertungen: NeubauBewertung[]; onSterne: (n: number) => void;
+}) {
+  const score = p.claude_score !== undefined ? p.claude_score : null;
+  const detail = p.claude_score_detail !== undefined ? p.claude_score_detail : null;
+  return (
+    <div className="radar-bewertung">
+      <div className="radar-bewertung-feld">
+        <span className="xs muted">Passt zu uns</span>
+        <ScoreBadge score={score} detail={detail} titel="Claude" fuss={CLAUDE_FUSS} className="score-trigger" />
+      </div>
+      {profiles.map((pr) => {
+        const b = bewertungen.find((x) => x.user_id === pr.id);
+        const n = b !== undefined ? b.sterne : 0;
+        const ich = meId !== null && meId === pr.id && !leser;
+        return (
+          <div key={pr.id} className="radar-bewertung-feld">
+            <span className="xs" style={{ color: pr.farbe, fontWeight: 600 }}>{pr.name.split(' ')[0]}{ich ? ' (ich)' : ''}</span>
+            {ich
+              ? <StarsInput value={n} onChange={onSterne} color={pr.farbe} kompakt label={'Meine Sterne für ' + p.name} />
+              : <span className="radar-sterne-text" aria-label={n > 0 ? n + ' von 5 Sternen' : 'Noch nicht bewertet'}>{n > 0 ? <StarsText n={n} color={pr.farbe} /> : <span className="small muted">noch offen</span>}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Merken pro Person und gemeinsame Kurznotiz ----------
+function MerkenNotiz({ p, profiles, meId, leser, bewertungen, onMerken, onNotiz }: {
+  p: Neubauprojekt; profiles: Profile[]; meId: string | null; leser: boolean; bewertungen: NeubauBewertung[];
+  onMerken: (gemerkt: boolean) => void; onNotiz: (text: string) => Promise<boolean>;
+}) {
+  const [bearbeiten, setBearbeiten] = useState(false);
+  const [text, setText] = useState(p.kurznotiz || '');
+  const [speichert, setSpeichert] = useState(false);
+  const ich = meId !== null && !leser;
+  const meinGemerkt = bewertungen.some((b) => b.user_id === meId && b.gemerkt === true);
+  const andere = bewertungen.filter((b) => b.user_id !== meId && b.gemerkt === true)
+    .map((b) => profiles.find((x) => x.id === b.user_id)).filter((x): x is Profile => x !== undefined);
+  const von = p.kurznotiz_von ? profiles.find((x) => x.id === p.kurznotiz_von) : undefined;
+
+  async function speichern() {
+    const neu = text.trim();
+    if (neu === (p.kurznotiz || '')) { setBearbeiten(false); return; }
+    setSpeichert(true);
+    const ok = await onNotiz(neu);
+    setSpeichert(false);
+    if (ok) { setBearbeiten(false); }
+  }
+
+  return (
+    <div className="radar-merken">
+      <div className="radar-merken-zeile">
+        {ich ? (
+          <button type="button" className={'btn sm merken-btn' + (meinGemerkt ? ' an' : '')} aria-pressed={meinGemerkt} onClick={() => onMerken(!meinGemerkt)}
+            title={meinGemerkt ? 'Nicht mehr merken' : 'Für mich merken'}>
+            <span aria-hidden="true">{meinGemerkt ? '★' : '☆'}</span> {meinGemerkt ? 'Gemerkt' : 'Merken'}
+          </button>
+        ) : null}
+        {andere.map((pr) => <span key={pr.id} className="chip outline" style={{ color: pr.farbe, borderColor: pr.farbe }}>★ {pr.name.split(' ')[0]} merkt</span>)}
+        {!bearbeiten && p.kurznotiz ? (
+          <span className="radar-kurznotiz" title={von ? 'Von ' + von.name.split(' ')[0] + (p.kurznotiz_am ? ', ' + dateShort(p.kurznotiz_am) : '') : undefined}>«{p.kurznotiz}»</span>
+        ) : null}
+        {!bearbeiten && ich ? (
+          <button type="button" className="linkbtn small" onClick={() => { setText(p.kurznotiz || ''); setBearbeiten(true); }}>{p.kurznotiz ? 'Notiz ändern' : 'Kurznotiz'}</button>
+        ) : null}
+      </div>
+      {bearbeiten ? (
+        <div className="radar-merken-zeile">
+          <input className="input radar-kurznotiz-input" autoFocus maxLength={120} value={text} aria-label={'Kurznotiz für ' + p.name}
+            placeholder="z.B. Seeblick, nah Bahnhof, Velo-Runde"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); speichern(); } if (e.key === 'Escape') { setText(p.kurznotiz || ''); setBearbeiten(false); } }} />
+          <button type="button" className="btn sm primary" disabled={speichert} onClick={speichern}>{speichert ? 'Speichert …' : 'Speichern'}</button>
+          <button type="button" className="btn sm" onClick={() => { setText(p.kurznotiz || ''); setBearbeiten(false); }}>Abbrechen</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------- Hinweis «Kontakt sinnvoll» (geplante Projekte) ----------
+function KontaktHinweis({ p, gesuche, leser, onKontaktiert }: { p: Neubauprojekt; gesuche: Baugesuch[]; leser: boolean; onKontaktiert: () => void }) {
+  if (!kontaktSinnvoll(p)) { return null; }
+  const g = gesuche.find((x) => x.bauherr || x.projektverfasser);
+  const wer = g !== undefined ? [g.bauherr ? 'Bauherr: ' + g.bauherr : null, g.projektverfasser ? 'Projektverfasser: ' + g.projektverfasser : null].filter(Boolean).join(' · ') : '';
+  const kontaktiert = schonKontaktiert(p);
+  return (
+    <div className={'radar-kontakt' + (kontaktiert ? ' erledigt' : '')} role="note">
+      <div><strong>{kontaktiert ? 'Kontaktiert am ' + dateShort(p.kontaktiert_am) : 'Kontaktaufnahme sinnvoll'}</strong> <span className="small">{p.kontakt_grund}{p.kontakt_sinnvoll_seit ? ' · seit ' + dateShort(p.kontakt_sinnvoll_seit) : ''}</span></div>
+      {wer !== '' ? <div className="small">{wer}</div> : <div className="small muted">Bauherr ist eine Privatperson oder unbekannt: Kontakt über die Gemeinde (Bauamt) oder die Bautafel vor Ort.</div>}
+      {!leser && !kontaktiert ? <div><button type="button" className="btn sm" onClick={onKontaktiert}>Als kontaktiert markieren</button></div> : null}
+    </div>
+  );
+}
+
 // ---------- Projektkarte ----------
-function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, onEdit, onPhase, onInteressent }: {
+function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, profiles, meId, bewertungen, ueberwacht, onSterne, onMerken, onNotiz, onKontaktiert, onEdit, onPhase, onInteressent }: {
   p: Neubauprojekt; gesuche: Baugesuch[]; ereignisse: NeubauEreignis[]; inserate: ProjektInserat[]; leser: boolean; hervorgehoben: boolean;
+  profiles: Profile[]; meId: string | null; bewertungen: NeubauBewertung[]; ueberwacht: boolean; onSterne: (n: number) => void;
+  onMerken: (gemerkt: boolean) => void; onNotiz: (text: string) => Promise<boolean>; onKontaktiert: () => void;
   onEdit: () => void; onPhase: (ph: NeubauPhase) => void; onInteressent: () => void;
 }) {
   const [offen, setOffen] = useState(false);
@@ -161,6 +270,12 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
             <span className={phaseChip(p.phase)}>{(PHASEN.find((x) => x.code === p.phase) || PHASEN[0]).name}</span>
             {p.interessent_seit ? <span className="chip green" title="Wir stehen auf der Interessentenliste">Vorgemerkt seit {dateShort(p.interessent_seit)}</span> : null}
             {p.preis_ab !== null ? <span className={imBudget ? 'chip green' : 'chip warm'}>{imBudget ? 'im Budget' : 'über Budget'}</span> : null}
+            {kontaktSinnvoll(p) && !schonKontaktiert(p) ? <span className="chip warm" title={p.kontakt_grund || undefined}>Kontakt sinnvoll</span> : null}
+            {ueberwacht ? (
+              <span className="chip outline" title={'Gebäude- und Wohnungsregister' + (p.gwr_geprueft_am ? ', geprüft ' + dateShort(p.gwr_geprueft_am) : ', noch nicht geprüft') + (p.gwr_status_seit ? ', Status seit ' + dateShort(p.gwr_status_seit) : '')}>
+                GWR: {p.gwr_status !== undefined && p.gwr_status !== null ? (GWR_TEXT[p.gwr_status] || p.gwr_status) : p.gwr_geprueft_am ? 'noch nicht erfasst' : 'offen'}
+              </span>
+            ) : null}
           </div>
           <h3 className="radar-projekt-name">{p.name}</h3>
           <div className="muted small">{[p.gemeinde, p.adresse].filter(Boolean).join(' · ')}</div>
@@ -170,6 +285,9 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
           <TeilenButton className="btn sm" nurIcon inhalt={teilenInhalt} />
         </div>
       </div>
+      <ProjektBewertung p={p} profiles={profiles} meId={meId} leser={leser} bewertungen={bewertungen} onSterne={onSterne} />
+      <MerkenNotiz p={p} profiles={profiles} meId={meId} leser={leser} bewertungen={bewertungen} onMerken={onMerken} onNotiz={onNotiz} />
+      <KontaktHinweis p={p} gesuche={gesuche} leser={leser} onKontaktiert={onKontaktiert} />
       <dl className="radar-fakten">
         {p.typ ? <div><dt>Typ</dt><dd>{p.typ}{p.einheiten !== null ? ', ' + p.einheiten + ' Einheiten' : ''}</dd></div> : null}
         {zimmer !== '' ? <div><dt>Zimmer</dt><dd className="tnum">{zimmer}</dd></div> : null}
@@ -212,7 +330,7 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
             <div key={g.id} className="small"><span className="muted tnum">{dateShort(g.publiziert_am)}</span> Baugesuch {g.adresse}: {g.beschreibung} {g.url ? <a href={g.url} target="_blank" rel="noreferrer">Amtsblatt</a> : null}</div>
           ))}
           {ereignisse.map((e) => (
-            <div key={e.id} className="small"><span className="muted tnum">{dateShort(e.datum)}</span> {e.typ === 'erfasst' ? 'Erfasst' : e.typ === 'phase' ? 'Phase: ' + (e.alt || '') + ' → ' + (e.neu || '') : e.typ === 'preis' ? 'Preis ab: ' + chf(Number(e.alt)) + ' → ' + chf(Number(e.neu)) : e.typ === 'baugesuch' ? 'Baugesuch verknüpft' : (e.neu || e.typ)}</div>
+            <div key={e.id} className="small"><span className="muted tnum">{dateShort(e.datum)}</span> {e.typ === 'erfasst' ? 'Erfasst' : e.typ === 'phase' ? 'Phase: ' + (e.alt || '') + ' → ' + (e.neu || '') : e.typ === 'preis' ? 'Preis ab: ' + chf(Number(e.alt)) + ' → ' + chf(Number(e.neu)) : e.typ === 'baugesuch' ? 'Baugesuch verknüpft' : e.typ === 'gwr' ? 'GWR: ' + (e.alt || '') + ' → ' + (e.neu || '') : (e.neu || e.typ)}</div>
           ))}
           {gesuche.length === 0 && ereignisse.length === 0 ? <div className="muted small">Noch kein Verlauf.</div> : null}
         </div>
@@ -223,7 +341,7 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
 
 // ---------- Seite ----------
 export default function Radar() {
-  const { leser } = useApp();
+  const { leser, profiles, me } = useApp();
   const [params, setParams] = useSearchParams();
   // Geteilte Links: /radar?projekt=<id> oder /radar?gesuch=<id>
   const geteiltProjekt = params.get('projekt');
@@ -231,13 +349,19 @@ export default function Radar() {
   const [tab, setTab] = useState<Tab>(() => {
     if (geteiltProjekt !== null) { return 'projekte'; }
     if (geteiltGesuch !== null) { return 'baugesuche'; }
-    try { const t = localStorage.getItem('radar-tab'); return t === 'baugesuche' || t === 'gemeinden' ? t : 'projekte'; } catch { return 'projekte'; }
+    if (params.get('filter') === 'kontakt') { return 'projekte'; }
+    try { const t = localStorage.getItem('radar-tab'); return t === 'baugesuche' || t === 'gemeinden' || t === 'karte' ? t : 'projekte'; } catch { return 'projekte'; }
   });
+  // Filter für Projekte und Karte: alle, nur von mir gemerkte, nur «Kontakt sinnvoll»; Suche auch in der Kurznotiz
+  const [projFilter, setProjFilter] = useState<ProjektFilter>(() => (params.get('filter') === 'kontakt' ? 'kontakt' : 'alle'));
+  const [projSuche, setProjSuche] = useState('');
+  const [kartenPhase, setKartenPhase] = useState<KartenPhase>('geplant');
   const [projekte, setProjekte] = useState<Neubauprojekt[]>([]);
   const [gesuche, setGesuche] = useState<Baugesuch[]>([]);
   const [ereignisse, setEreignisse] = useState<NeubauEreignis[]>([]);
   const [gemeinden, setGemeinden] = useState<RadarGemeinde[]>([]);
   const [inserate, setInserate] = useState<ProjektInserat[]>([]);
+  const [bewertungen, setBewertungen] = useState<NeubauBewertung[]>([]);
   const [laden, setLaden] = useState(true);
   const [ein, setEin] = useState<EinFilter>('relevant');
   const [kat, setKat] = useState<string>('');
@@ -253,15 +377,22 @@ export default function Radar() {
   const [neueGemeinde, setNeueGemeinde] = useState({ name: '', kanton: 'ZH', bfs: '' });
 
   useEffect(() => { try { localStorage.setItem('radar-tab', tab); } catch { /* egal */ } }, [tab]);
+  // Link aus dem Push «Kontakt sinnvoll»: /radar?filter=kontakt
+  useEffect(() => {
+    if (params.get('filter') === 'kontakt') { setTab('projekte'); setProjFilter('kontakt'); setParams({}, { replace: true }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   async function laden_() {
-    const [p, g, e, gm, o] = await Promise.all([
+    const [p, g, e, gm, o, bw] = await Promise.all([
       supabase.from('neubauprojekte').select('*').order('aktualisiert_am', { ascending: false }),
       supabase.from('baugesuche').select('*').order('publiziert_am', { ascending: false }).limit(3000),
       supabase.from('neubau_ereignisse').select('*').order('datum', { ascending: false }).limit(2000),
       supabase.from('radar_gemeinden').select('*').order('kanton').order('name'),
       supabase.from('objekte').select('id, zimmer, flaeche_m2, preis_chf, markt_status, neubauprojekt_id').not('neubauprojekt_id', 'is', null).is('zusammengefuehrt_in', null).order('preis_chf'),
+      supabase.from('neubau_bewertungen').select('*'),
     ]);
+    if (bw.data) { setBewertungen(bw.data as NeubauBewertung[]); }
     if (o.data) { setInserate(o.data as ProjektInserat[]); }
     if (p.data) { setProjekte(p.data as Neubauprojekt[]); }
     if (g.data) { setGesuche(g.data as Baugesuch[]); }
@@ -278,6 +409,7 @@ export default function Radar() {
     if (ziel === null) { return; }
     if (geteiltProjekt !== null) {
       setTab('projekte');
+      setProjFilter('alle'); setProjSuche('');
       const p = projekte.find((x) => x.id === geteiltProjekt);
       if (p !== undefined && !AKTIVE_PHASEN.includes(p.phase)) { setZeigeAlte(true); }
       if (p === undefined) { setMeldung('Das geteilte Projekt wurde nicht gefunden.'); }
@@ -350,6 +482,40 @@ export default function Radar() {
     const { error } = await supabase.from('baugesuche').update(patch).eq('id', b.id);
     if (error) { setMeldung(error.message); laden_(); }
   }
+  async function sterneSetzen(p: Neubauprojekt, n: number) {
+    if (me === null || leser) { return; }
+    const jetzt = new Date().toISOString();
+    const neu: NeubauBewertung = { neubauprojekt_id: p.id, user_id: me.id, sterne: n, aktualisiert_am: jetzt };
+    setBewertungen((xs) => [...xs.filter((x) => !(x.neubauprojekt_id === p.id && x.user_id === me.id)), neu]);
+    const { error } = await supabase.from('neubau_bewertungen').upsert(neu, { onConflict: 'neubauprojekt_id,user_id' });
+    if (error) { setMeldung('Bewertung nicht gespeichert: ' + error.message); laden_(); }
+  }
+  async function merkenSetzen(p: Neubauprojekt, gemerkt: boolean) {
+    if (me === null || leser) { return; }
+    const jetzt = new Date().toISOString();
+    const alt = bewertungen.find((x) => x.neubauprojekt_id === p.id && x.user_id === me.id);
+    const neu: NeubauBewertung = { neubauprojekt_id: p.id, user_id: me.id, sterne: alt !== undefined ? alt.sterne : 0, aktualisiert_am: jetzt, gemerkt, gemerkt_am: gemerkt ? jetzt : null };
+    setBewertungen((xs) => [...xs.filter((x) => !(x.neubauprojekt_id === p.id && x.user_id === me.id)), neu]);
+    // Nur gemerkt schreiben, die Sterne bleiben unverändert
+    const { error } = await supabase.from('neubau_bewertungen').upsert({ neubauprojekt_id: p.id, user_id: me.id, gemerkt, gemerkt_am: neu.gemerkt_am, aktualisiert_am: jetzt }, { onConflict: 'neubauprojekt_id,user_id' });
+    if (error) { setMeldung('Merken nicht gespeichert: ' + error.message); laden_(); }
+  }
+  async function notizSetzen(p: Neubauprojekt, text: string): Promise<boolean> {
+    if (me === null || leser) { return false; }
+    const jetzt = new Date().toISOString();
+    const patch = { kurznotiz: text === '' ? null : text, kurznotiz_von: text === '' ? null : me.id, kurznotiz_am: text === '' ? null : jetzt };
+    const { error } = await supabase.from('neubauprojekte').update(patch).eq('id', p.id);
+    if (error) { setMeldung('Kurznotiz nicht gespeichert: ' + error.message); return false; }
+    setProjekte((xs) => xs.map((x) => (x.id === p.id ? { ...x, ...patch } : x)));
+    return true;
+  }
+  async function kontaktiert(p: Neubauprojekt) {
+    const heute = heuteIso();
+    setProjekte((xs) => xs.map((x) => (x.id === p.id ? { ...x, kontaktiert_am: heute } : x)));
+    const { error } = await supabase.from('neubauprojekte').update({ kontaktiert_am: heute }).eq('id', p.id);
+    if (error) { setMeldung(error.message); laden_(); return; }
+    await supabase.from('neubau_ereignisse').insert({ neubauprojekt_id: p.id, typ: 'kontakt', neu: 'Kontaktiert', user_id: me !== null ? me.id : null });
+  }
   async function phaseSetzen(p: Neubauprojekt, ph: NeubauPhase) {
     const { error } = await supabase.rpc('neubauprojekt_melden', { p: { id: p.id, phase: ph } });
     if (error) { setMeldung(error.message); }
@@ -391,8 +557,54 @@ export default function Radar() {
     laden_();
   }
 
-  const aktiv = projekte.filter((p) => AKTIVE_PHASEN.includes(p.phase));
-  const alt = projekte.filter((p) => !AKTIVE_PHASEN.includes(p.phase));
+  const meId = me !== null ? me.id : null;
+  const ichMerke = (p: Neubauprojekt) => bewertungen.some((b) => b.neubauprojekt_id === p.id && b.user_id === meId && b.gemerkt === true);
+  const ueberwacht = (p: Neubauprojekt) => p.phase === 'geplant' && istMehrfamilien(p, gesuche);
+  const passtFilter = (p: Neubauprojekt): boolean => {
+    if (p.id === geteiltProjekt) { return true; }
+    if (projFilter === 'gemerkt' && !ichMerke(p)) { return false; }
+    if (projFilter === 'kontakt' && !kontaktSinnvoll(p)) { return false; }
+    const q = projSuche.trim().toLowerCase();
+    if (q !== '' && ![p.name, p.gemeinde, p.adresse, p.kurznotiz, p.bauherr, p.vermarkter, p.notiz].join(' ').toLowerCase().includes(q)) { return false; }
+    return true;
+  };
+  // Geplant: zuerst «Kontakt sinnvoll» (noch nicht kontaktiert), dann von mir gemerkte, dann neuste
+  const rang = (p: Neubauprojekt) => (kontaktSinnvoll(p) && !schonKontaktiert(p) ? 0 : ichMerke(p) ? 1 : 2);
+  const aktiv = projekte.filter((p) => AKTIVE_PHASEN.includes(p.phase) && passtFilter(p)).sort((a, b) => rang(a) - rang(b));
+  const alt = projekte.filter((p) => !AKTIVE_PHASEN.includes(p.phase) && passtFilter(p));
+  const anzahlAktiv = projekte.filter((p) => AKTIVE_PHASEN.includes(p.phase)).length;
+  const kpiKontakt = projekte.filter((p) => kontaktSinnvoll(p) && !schonKontaktiert(p)).length;
+  const anzahlGemerkt = projekte.filter((p) => AKTIVE_PHASEN.includes(p.phase) && ichMerke(p)).length;
+  const anzahlKontakt = projekte.filter((p) => kontaktSinnvoll(p)).length;
+
+  const kartenProjekte = projekte.filter((p) => AKTIVE_PHASEN.includes(p.phase) && passtFilter(p)
+    && (kartenPhase === 'aktiv' || (kartenPhase === 'geplant' ? p.phase === 'geplant' : p.phase !== 'geplant')));
+  const kartenPunkte: KartenPunkt[] = [];
+  kartenProjekte.forEach((p) => { const k = zuRadarPunkt(p, gesuche, bewertungen, profiles); if (k !== null) { kartenPunkte.push(k); } });
+  const ohnePosition = kartenProjekte.filter((p) => p.lat === undefined || p.lat === null);
+
+  const karteFuer = (p: Neubauprojekt) => (
+    <ProjektKarte key={p.id} p={p} leser={leser} hervorgehoben={p.id === geteiltProjekt}
+      gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
+      ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
+      inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
+      profiles={profiles} meId={meId} ueberwacht={ueberwacht(p)}
+      bewertungen={bewertungen.filter((b) => b.neubauprojekt_id === p.id)} onSterne={(n) => sterneSetzen(p, n)}
+      onMerken={(g) => merkenSetzen(p, g)} onNotiz={(t) => notizSetzen(p, t)} onKontaktiert={() => kontaktiert(p)}
+      onEdit={() => setModal({ start: { ...p }, gesuchId: null })}
+      onPhase={(x) => phaseSetzen(p, x)} onInteressent={() => vorgemerkt(p)} />
+  );
+
+  const projektFilterLeiste = (
+    <div className="radar-projektfilter">
+      <div className="seg" aria-label="Projekte filtern">
+        <button type="button" aria-pressed={projFilter === 'alle'} onClick={() => setProjFilter('alle')}>Alle</button>
+        <button type="button" aria-pressed={projFilter === 'gemerkt'} onClick={() => setProjFilter('gemerkt')} title="Von mir gemerkte Projekte">★ Gemerkt <span className="tnum muted">{anzahlGemerkt}</span></button>
+        <button type="button" aria-pressed={projFilter === 'kontakt'} onClick={() => setProjFilter('kontakt')} title="Bewilligt, im Bau oder Vermarkter gefunden">Kontakt sinnvoll <span className="tnum muted">{anzahlKontakt}</span></button>
+      </div>
+      <input className="input radar-suche" type="search" aria-label="Projekte durchsuchen" placeholder="Suche: Kurznotiz, Gemeinde, Strasse …" value={projSuche} onChange={(e) => setProjSuche(e.target.value)} />
+    </div>
+  );
   const gemeindenMitGesuchen = Array.from(new Set(gesuche.map((b) => b.gemeinde).filter(Boolean) as string[])).sort();
 
   return (
@@ -411,7 +623,8 @@ export default function Radar() {
       </div>
 
       <div className="kpis">
-        <div className="kpi accent"><span className="small muted">Im Verkauf</span><span className="v tnum">{kpiVerkauf}</span><span className="xs muted">Projekte mit Preisen</span></div>
+        <div className={'kpi' + (kpiKontakt > 0 ? ' accent' : '')}><span className="small muted">Kontakt sinnvoll</span><span className="v tnum">{kpiKontakt}</span><span className="xs muted">geplant, bewilligt oder Vermarkter da</span></div>
+        <div className="kpi"><span className="small muted">Im Verkauf</span><span className="v tnum">{kpiVerkauf}</span><span className="xs muted">Projekte mit Preisen</span></div>
         <div className="kpi"><span className="small muted">Vormerkung</span><span className="v tnum">{kpiVormerk}</span><span className="xs muted">Interessentenliste offen</span></div>
         <div className="kpi"><span className="small muted">Baugesuche im Fokus</span><span className="v tnum">{kpiNeu}</span><span className="xs muted">neu, Verkauf wahrscheinlich</span></div>
         <div className="kpi"><span className="small muted">Zu prüfen</span><span className="v tnum">{kpiPruefen}</span><span className="xs muted">neu, Vermarktung unklar</span></div>
@@ -421,7 +634,8 @@ export default function Radar() {
       {meldung !== null ? <div className="notice" role="status" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span>{meldung}</span><button type="button" className="linkbtn" onClick={() => setMeldung(null)}>Schliessen</button></div> : null}
 
       <div className="seg" role="tablist" aria-label="Ansicht" style={{ alignSelf: 'flex-start' }}>
-        <button type="button" role="tab" aria-pressed={tab === 'projekte'} aria-selected={tab === 'projekte'} onClick={() => setTab('projekte')}>Projekte <span className="tnum muted">{aktiv.length}</span></button>
+        <button type="button" role="tab" aria-pressed={tab === 'projekte'} aria-selected={tab === 'projekte'} onClick={() => setTab('projekte')}>Projekte <span className="tnum muted">{anzahlAktiv}</span>{kpiKontakt > 0 ? <span className="chip warm" style={{ marginLeft: 6 }} title="Kontakt sinnvoll">{kpiKontakt}</span> : null}</button>
+        <button type="button" role="tab" aria-pressed={tab === 'karte'} aria-selected={tab === 'karte'} onClick={() => setTab('karte')}>Karte</button>
         <button type="button" role="tab" aria-pressed={tab === 'baugesuche'} aria-selected={tab === 'baugesuche'} onClick={() => setTab('baugesuche')}>Baugesuche{kpiNeu > 0 ? <span className="chip warm" style={{ marginLeft: 6 }}>{kpiNeu}</span> : null}</button>
         <button type="button" role="tab" aria-pressed={tab === 'gemeinden'} aria-selected={tab === 'gemeinden'} onClick={() => setTab('gemeinden')}>Gemeinden</button>
       </div>
@@ -430,41 +644,63 @@ export default function Radar() {
 
       {!laden && tab === 'projekte' ? (
         <>
+          {projektFilterLeiste}
           {PHASEN.filter((ph) => AKTIVE_PHASEN.includes(ph.code)).map((ph) => {
             const liste = aktiv.filter((p) => p.phase === ph.code);
             if (liste.length === 0) { return null; }
             return (
               <section key={ph.code} className="radar-gruppe">
-                <div className="radar-gruppe-kopf"><h2>{ph.name} <span className="muted">({liste.length})</span></h2><span className="xs muted">{ph.hinweis}</span></div>
+                <div className="radar-gruppe-kopf"><h2>{ph.name} <span className="muted">({liste.length})</span></h2><span className="xs muted">{ph.code === 'geplant' ? 'Mehrfamilienhäuser, Überbauungen und Reihenhäuser. Täglicher Abgleich mit dem Gebäuderegister (GWR): sobald bewilligt, im Bau oder ein Vermarkter auftaucht, heisst es «Kontakt sinnvoll».' : ph.hinweis}</span></div>
                 <div className="radar-projekte">
-                  {liste.map((p) => (
-                    <ProjektKarte key={p.id} p={p} leser={leser} hervorgehoben={p.id === geteiltProjekt}
-                      gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
-                      ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
-                      inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
-                      onEdit={() => setModal({ start: { ...p }, gesuchId: null })}
-                      onPhase={(x) => phaseSetzen(p, x)} onInteressent={() => vorgemerkt(p)} />
-                  ))}
+                  {liste.map(karteFuer)}
                 </div>
               </section>
             );
           })}
-          {aktiv.length === 0 ? <div className="card empty">Noch keine aktiven Projekte. Der tägliche Lauf erfasst Neubauprojekte von Vermarktern und Banken, ihr könnt Projekte auch selbst erfassen oder aus einem Baugesuch anlegen.</div> : null}
+          {aktiv.length === 0 && anzahlAktiv > 0 ? <div className="card empty">Keine Projekte für diesen Filter.</div> : null}
+          {anzahlAktiv === 0 ? <div className="card empty">Noch keine aktiven Projekte. Der tägliche Lauf erfasst Neubauprojekte von Vermarktern und Banken, ihr könnt Projekte auch selbst erfassen oder aus einem Baugesuch anlegen.</div> : null}
           {alt.length > 0 ? (
             <section className="radar-gruppe">
               <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => setZeigeAlte(!zeigeAlte)} aria-expanded={zeigeAlte}>{zeigeAlte ? 'Ausverkaufte und uninteressante ausblenden' : 'Ausverkauft, nur Miete, uninteressant (' + alt.length + ')'}</button>
               {zeigeAlte ? (
                 <div className="radar-projekte">
-                  {alt.map((p) => (
-                    <ProjektKarte key={p.id} p={p} leser={leser} hervorgehoben={p.id === geteiltProjekt}
-                      gesuche={gesuche.filter((g) => g.neubauprojekt_id === p.id)}
-                      ereignisse={ereignisse.filter((e) => e.neubauprojekt_id === p.id)}
-                      inserate={inserate.filter((o) => o.neubauprojekt_id === p.id)}
-                      onEdit={() => setModal({ start: { ...p }, gesuchId: null })}
-                      onPhase={(x) => phaseSetzen(p, x)} onInteressent={() => vorgemerkt(p)} />
-                  ))}
+                  {alt.map(karteFuer)}
                 </div>
               ) : null}
+            </section>
+          ) : null}
+        </>
+      ) : null}
+
+      {!laden && tab === 'karte' ? (
+        <>
+          {projektFilterLeiste}
+          <section className="card">
+            <div className="radar-karte-kopf">
+              <div className="seg" aria-label="Phase auf der Karte">
+                <button type="button" aria-pressed={kartenPhase === 'geplant'} onClick={() => setKartenPhase('geplant')}>Geplant</button>
+                <button type="button" aria-pressed={kartenPhase === 'vermarktung'} onClick={() => setKartenPhase('vermarktung')}>Vormerkung &amp; Verkauf</button>
+                <button type="button" aria-pressed={kartenPhase === 'aktiv'} onClick={() => setKartenPhase('aktiv')}>Alle aktiven</button>
+              </div>
+              <span className="small muted">{kartenPunkte.length} Projekte auf der Karte</span>
+            </div>
+            <Karte punkte={kartenPunkte} hoehe="var(--karte-hoehe)" onNavigieren={(id) => setParams({ projekt: id })} />
+            <div className="karte-legende">
+              <span><i style={{ background: '#A4470B' }} />Kontakt sinnvoll</span>
+              <span><i style={{ background: '#5E6670' }} />Geplant</span>
+              <span><i style={{ background: '#1D5B84' }} />Vormerkung</span>
+              <span><i style={{ background: '#2F7D4F' }} />Im Verkauf</span>
+              <span>★ gemerkt</span>
+              <span><i className="ungenau" />Gestrichelt: nur Ort bekannt</span>
+            </div>
+          </section>
+          {ohnePosition.length > 0 ? (
+            <section className="card pad">
+              <h2>Noch ohne Position ({ohnePosition.length})</h2>
+              <p className="small muted" style={{ marginTop: 4 }}>Werden beim nächsten täglichen Abgleich (06:30) über das Gebäuderegister bzw. die Adresssuche verortet.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                {ohnePosition.map((p) => <button key={p.id} type="button" className="chip outline chip-x" onClick={() => setParams({ projekt: p.id })}>{p.name}</button>)}
+              </div>
             </section>
           ) : null}
         </>

@@ -64,7 +64,7 @@ export interface KriteriumGewicht { user_id: string; kriterium: string; gewicht:
 
 /** Automatischer Score 0..100 (objekte.score_auto_detail, gerechnet in der DB) */
 export interface ScoreFaktor { name: string; punkte: number; max: number; text: string }
-export interface ScoreDetail { score: number | null; punkte_roh?: number; max?: number; faktoren: ScoreFaktor[]; hinweise: string[]; steuer?: Record<string, number | string> | null; stand: string }
+export interface ScoreDetail { score: number | null; punkte_roh?: number; max?: number; faktoren: ScoreFaktor[]; hinweise: string[]; steuer?: Record<string, number | string> | null; fazit?: string; stand: string }
 
 export interface Kriterium { code: string; name: string; beschreibung: string | null; sort: number }
 export interface KriterienBewertung { objekt_id: string; user_id: string; kriterium: string; wert: number }
@@ -303,6 +303,31 @@ export interface Neubauprojekt {
   zuletzt_geprueft: string | null;
   erfasst_am: string;
   aktualisiert_am: string;
+  /** Einschätzung von Claude «Passt zu uns» (0 bis 100), siehe Migration 20261028_radar_score_bewertung.sql */
+  claude_score?: number | null;
+  claude_score_detail?: ScoreDetail | null;
+  claude_score_am?: string | null;
+  claude_lage?: number | null;
+  claude_fazit?: string | null;
+  /** Karte und GWR-Überwachung, siehe Migration 20261101_radar_karte_gwr.sql */
+  lat?: number | null;
+  lng?: number | null;
+  geo_genauigkeit?: 'gwr' | 'adresse' | 'ort' | 'manuell' | null;
+  /** GWR-Gebäudestatus des Neubaus: 1001 projektiert, 1002 bewilligt, 1003 im Bau, 1004 fertig */
+  gwr_status?: number | null;
+  gwr_status_seit?: string | null;
+  gwr_egid?: number | null;
+  gwr_wohnungen?: number | null;
+  gwr_geprueft_am?: string | null;
+  kontakt_sinnvoll_seit?: string | null;
+  kontakt_grund?: string | null;
+  kontaktiert_am?: string | null;
+  /** Gemeinsame Merkhilfe von Remo und Pascale, z.B. «Seeblick, nah Bahnhof» */
+  kurznotiz?: string | null;
+  kurznotiz_von?: string | null;
+  kurznotiz_am?: string | null;
 }
+/** Sterne und Merken pro Person auf einem Neubauprojekt (0 = keine Bewertung, gemerkt false = nicht gemerkt) */
+export interface NeubauBewertung { neubauprojekt_id: string; user_id: string; sterne: number; aktualisiert_am: string; gemerkt?: boolean; gemerkt_am?: string | null }
 export interface NeubauEreignis { id: number; neubauprojekt_id: string; datum: string; typ: string; alt: string | null; neu: string | null; user_id: string | null }
 export interface RadarGemeinde { name: string; kanton: string; bfs_nr: number | null; aktiv: boolean; hinweis: string | null }
