@@ -581,3 +581,26 @@ table.list th.sterne-spalte .th-sort { justify-content: center; }
 .radar-bewertung .star-btns, .radar-bewertung .score-trigger { min-height: 30px; align-items: center; }
 .radar-bewertung .star-btns button { font-size: 20px; padding: 2px 1px; min-width: 24px; }
 .radar-sterne-text { display: inline-flex; align-items: center; min-height: 30px; font-size: 18px; }
+
+/* Neubau-Radar: Merken pro Person, gemeinsame Kurznotiz, Kontakt sinnvoll, Karte */
+.radar-merken { display: flex; flex-direction: column; gap: 8px; }
+.radar-merken-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.merken-btn { display: inline-flex; align-items: center; gap: 6px; }
+.merken-btn span { font-size: 16px; line-height: 1; color: var(--amber); }
+.merken-btn.an { background: #FFF6E3; border-color: #E8C77A; color: var(--ink); }
+.radar-kurznotiz { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.radar-kurznotiz-input { flex: 1 1 220px; width: auto; }
+.radar-kontakt { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--warm-soft); border: 1px solid #F1CDB2; color: var(--warm-dark); }
+.radar-kontakt strong { font-weight: 700; }
+.radar-kontakt .small { color: var(--ink-2); }
+.radar-kontakt.erledigt { background: var(--green-soft); border-color: #C5E1CF; color: var(--green-dark); }
+.radar-projektfilter { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.radar-projektfilter .radar-suche { width: auto; flex: 1 1 240px; max-width: 420px; }
+.radar-karte-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; }
+.pp-notiz { font-weight: 600; margin: 2px 0; }
+.pp-kontakt { color: var(--warm-dark); font-weight: 600; font-size: 12px; margin: 4px 0; }
+@media (max-width: 720px) {
+  .radar-projektfilter .seg { width: 100%; overflow-x: auto; }
+  .radar-projektfilter .radar-suche { max-width: none; }
+  .merken-btn { min-height: 40px; }
+}

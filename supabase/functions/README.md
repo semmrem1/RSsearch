@@ -7,3 +7,4 @@
 
 `auth.ts` ist in jedem Ordner identisch (Deploy über MCP erlaubt keine gemeinsamen Ordner). Berechtigt ist ein gültiges Session-Token der App oder der Header `x-app-secret` (Vault `app_secret`), den `public.edge_aufruf()` aus SQL mitschickt. Alle Functions sind mit `verify_jwt = false` deployt, die Prüfung passiert in `auth.ts`.
 - `baugesuche-abruf`: Neubau-Radar, Baugesuche aus Amtsblatt ZH/SZ und Publikationen SG (täglich per pg_cron)
+- `radar-gwr`: Neubau-Radar, Koordinaten und GWR-Status (projektiert/bewilligt/im Bau) der geplanten Mehrfamilienbauten, setzt «Kontakt sinnvoll» (täglich per pg_cron)
