@@ -64,7 +64,7 @@ export interface KriteriumGewicht { user_id: string; kriterium: string; gewicht:
 
 /** Automatischer Score 0..100 (objekte.score_auto_detail, gerechnet in der DB) */
 export interface ScoreFaktor { name: string; punkte: number; max: number; text: string }
-export interface ScoreDetail { score: number | null; punkte_roh?: number; max?: number; faktoren: ScoreFaktor[]; hinweise: string[]; steuer?: Record<string, number | string> | null; fazit?: string; stand: string }
+export interface ScoreDetail { score: number | null; punkte_roh?: number; max?: number; faktoren: ScoreFaktor[]; hinweise: string[]; steuer?: Record<string, number | string> | null; fazit?: string; stand: string; manuell?: boolean; score_berechnet?: number | null; manuell_grund?: string | null }
 
 export interface Kriterium { code: string; name: string; beschreibung: string | null; sort: number }
 export interface KriterienBewertung { objekt_id: string; user_id: string; kriterium: string; wert: number }
@@ -135,6 +135,10 @@ export interface Objekt {
   heizung?: string | null;
   score_auto?: number | null;
   score_auto_detail?: ScoreDetail | null;
+  score_manuell?: number | null;
+  score_manuell_grund?: string | null;
+  score_manuell_von?: string | null;
+  score_manuell_am?: string | null;
   created_at: string;
   updated_at: string;
 }

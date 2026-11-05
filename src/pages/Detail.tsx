@@ -19,6 +19,7 @@ import FinanzierungKarte from '../components/FinanzierungKarte';
 import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
 import ScoreInfo, { scoreFarbe } from '../components/ScoreInfo';
 import TeilenButton from '../components/TeilenButton';
+import ScoreManuell from '../components/ScoreManuell';
 import type { ExposeExtrakt, Gemeinde, ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
@@ -297,6 +298,7 @@ export default function Detail() {
           </div>
         );
         return (
+          <>
           <section className="ek-strip" aria-label="Entscheid auf einen Blick">
             {amp !== null ? (
               <AmpelInfo ampel={amp} className="kpi ek ek-ampel" style={{ borderColor: AMPEL_FARBE[amp.stufe], cursor: 'help' }}>
@@ -316,11 +318,13 @@ export default function Detail() {
             <ScoreInfo key="score" score={scoreAuto} detail={scoreDetail} className="kpi ek ek-ampel" style={{ borderColor: scoreFarbe(scoreAuto), cursor: 'help' }}>
               <span className="xs muted">Score</span>
               <span className="tnum ek-wert" style={{ color: scoreFarbe(scoreAuto) }}>{scoreAuto !== null && scoreAuto !== undefined ? scoreAuto + ' / 100' : '–'}</span>
-              <span className="xs muted ek-sub">{scoreDetail !== null && scoreDetail !== undefined && scoreDetail.faktoren.length > 0 ? 'schwach: ' + (scoreDetail.faktoren.filter((f) => f.max > 0 && f.punkte / f.max < 0.4).map((f) => f.name).join(', ') || 'nichts') + ' · Details beim Überfahren' : 'automatisch, Details beim Überfahren'}</span>
+              <span className="xs muted ek-sub">{scoreDetail !== null && scoreDetail !== undefined && scoreDetail.manuell === true ? '✎ manuell gesetzt · berechnet ' + (scoreDetail.score_berechnet !== null && scoreDetail.score_berechnet !== undefined ? scoreDetail.score_berechnet : '–') + ' · Details beim Überfahren' : scoreDetail !== null && scoreDetail !== undefined && scoreDetail.faktoren.length > 0 ? 'schwach: ' + (scoreDetail.faktoren.filter((f) => f.max > 0 && f.punkte / f.max < 0.4).map((f) => f.name).join(', ') || 'nichts') + ' · Details beim Überfahren' : 'automatisch, Details beim Überfahren'}</span>
             </ScoreInfo>
             {kpi('Objektbewertung', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · ') + ' · gewichtete Kriterien')}
             {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') + (gemeinde.steuerfuss_kanton ? ' · gesamt ' + (Number(gemeinde.steuerfuss) + Number(gemeinde.steuerfuss_kanton) + Number(gemeinde.steuerfuss_bezirk || 0)) + ' %' : '') : o.ort)}
           </section>
+          <ScoreManuell key={'sm-' + (o.score_manuell !== undefined && o.score_manuell !== null ? o.score_manuell : 'x')} objektId={o.id} wert={o.score_manuell} grund={o.score_manuell_grund} detail={scoreDetail} userId={me !== null ? me.id : null} leser={leser} onGespeichert={load} />
+          </>
         );
       })()}
 

@@ -15,11 +15,12 @@ export function scoreFarbe(s: number | null | undefined): string {
 /** Score-Badge (0 bis 100) mit Erklärung beim Überfahren: Faktoren, Punkte und Hinweise. */
 export function ScoreBadge({ score, detail, className, style, gross, titel, fuss }: { score: number | null | undefined; detail: ScoreDetail | null | undefined; className?: string; style?: CSSProperties; gross?: boolean; titel?: string; fuss?: string }) {
   const farbe = scoreFarbe(score);
-  const badge = <span className={'score-badge' + (gross ? ' gross' : '')} style={{ borderColor: farbe, color: farbe }}>{score !== null && score !== undefined ? score : '–'}</span>;
+  const manuell = detail !== null && detail !== undefined && detail.manuell === true;
+  const badge = <span className={'score-badge' + (gross ? ' gross' : '') + (manuell ? ' manuell' : '')} style={{ borderColor: farbe, color: farbe }}>{score !== null && score !== undefined ? score : '–'}{manuell ? <sup aria-label="manuell gesetzt">✎</sup> : null}</span>;
   return <ScoreInfo score={score} detail={detail} className={className} style={style} titel={titel} fuss={fuss}>{badge}</ScoreInfo>;
 }
 
-const FUSS_OBJEKT = 'Objektive Faktoren: Tragbarkeit, Budget, Preis pro m², Fläche, Zimmer, Typ, Baujahr, Heizung, Steuern, Pendeln. Eure Bewertungen fliessen nicht ein. Wird beim Eintreffen, bei Änderungen und täglich neu gerechnet.';
+const FUSS_OBJEKT = 'Objektive Faktoren: Tragbarkeit, Budget, Preis pro m², Fläche, Zimmer, Typ, Baujahr, Heizung, Steuern, Pendeln. Eure Bewertungen fliessen nicht ein. Wird beim Eintreffen, bei Änderungen und täglich neu gerechnet. Ein manuell gesetzter Score (✎) übersteuert die Berechnung.';
 
 export default function ScoreInfo({ score, detail, children, className, style, titel, fuss }: { score: number | null | undefined; detail: ScoreDetail | null | undefined; children: ReactNode; className?: string; style?: CSSProperties; titel?: string; fuss?: string }) {
   const farbe = scoreFarbe(score);
@@ -29,7 +30,7 @@ export default function ScoreInfo({ score, detail, children, className, style, t
     <>
       <div className="ampel-pop-kopf">
         <strong style={{ color: farbe, fontSize: 16 }}>{titel !== undefined ? titel : 'Score'} {score !== null && score !== undefined ? score : '–'} von 100</strong>
-        <span className="xs muted" style={{ marginLeft: 'auto' }}>{detail !== null && detail !== undefined && detail.punkte_roh !== undefined ? 'Stand ' + dateShort(detail.stand) : 'automatisch berechnet'}</span>
+        <span className="xs muted" style={{ marginLeft: 'auto' }}>{detail !== null && detail !== undefined && detail.manuell === true ? 'manuell · berechnet ' + (detail.score_berechnet !== null && detail.score_berechnet !== undefined ? detail.score_berechnet : '–') : (detail !== null && detail !== undefined && detail.punkte_roh !== undefined ? 'Stand ' + dateShort(detail.stand) : 'automatisch berechnet')}</span>
       </div>
       {detail !== null && detail !== undefined && detail.fazit ? <div className="small" style={{ padding: '6px 0 2px', fontWeight: 600 }}>{detail.fazit}</div> : null}
       {faktoren.length === 0 ? <div className="small muted" style={{ padding: '8px 0' }}>{hinweise.length > 0 ? hinweise.join(' · ') : 'Noch keine Berechnung (kein Preis bekannt).'}</div> : (

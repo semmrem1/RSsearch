@@ -45,6 +45,12 @@ Alle Verbesserungsvorschläge, die Budgetrechnung und der «Entscheid auf einen 
 - Täglicher Lauf: prüft, ob `Radar GWR` heute gelaufen ist, sucht rotierend 12 geplante Mehrfamilienbauten pro Tag nach Vermarkter/Website (älteste `zuletzt_geprueft` zuerst, jedes Projekt etwa wöchentlich), legt neue «geplant» nur noch für Mehrfamilienbauten an und ruft `neubau_kontakt_melden()` auf
 - Mock-Test (Playwright 1366 px und 390 px) ok: Merken schickt upsert `{gemerkt}`, Kurznotiz update, Filter, Suche über Notiz, Kontaktiert, Karte mit Pins, Popup springt zum Projekt
 
+## Stand 05.11.2026: Manueller Score pro Inserat (LIVE)
+- Migration `20261105_score_manuell.sql` (live, additiv): Spalten `objekte.score_manuell` (0..100), `score_manuell_grund`, `score_manuell_von`, `score_manuell_am`. Bisherige Berechnung heisst neu `objekt_score_berechnet(objekte)`; `objekt_score_rechnen(objekte)` ist eine Hülle, die bei gesetztem `score_manuell` diesen Wert als `score` zurückgibt und im Detail `manuell: true`, `score_berechnet`, `manuell_grund` und einen Hinweis ergänzt. Bei verkauft/offline/zusammengeführt ruht der manuelle Wert. Trigger `objekte_score` reagiert zusätzlich auf `score_manuell`, `score_manuell_grund`. Badge, Filter, Ampel, Sortierung und `scores_berechnen()` übernehmen den Wert ohne weitere Änderung
+- **Wichtig:** Änderungen an der Score-Logik künftig in `objekt_score_berechnet()` machen, nicht in `objekt_score_rechnen()`
+- App: `ScoreManuell` unter der KPI-Leiste im Inserat (Setzen mit Begründung, Ändern, «Zurück auf berechnet»; Leser nur Anzeige). Badge gestrichelt mit ✎, Popover zeigt «manuell · berechnet X»
+- Gesetzt: Bergweidstrasse Pfäffikon ZH (`9e1cfb9e-…`) auf 88 (berechnet 50; Finanzierung machbar, Steuern akzeptiert). Am 05.11. ausserdem Microsite https://bergweidstrasse.netlify.app/ übernommen: Raumprogramm, Heizung, Lage, Quelle Vollenweider, 9 PDFs, 10 Bilder
+
 ## Noch zu tun (nächste Session)
 1. Live-Test nach Deploy: Inserat öffnen, Zins effektiv ändern (speichert mit 400 ms Verzögerung), Pensum ändern, Ampel in der Übersicht prüfen
 2. Haushalt- und Budgetwerte eintragen (Eigenkapital, Einkommen, Nettolöhne, Pensen, Ausgaben), sonst bleiben Tragbarkeit, Budget und Ampel «Offen»
