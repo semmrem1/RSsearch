@@ -609,3 +609,23 @@ table.list th.sterne-spalte .th-sort { justify-content: center; }
   .radar-projektfilter .radar-suche { max-width: none; }
   .merken-btn { min-height: 40px; }
 }
+
+/* Steuern-Karte */
+.steuer-karte.leaflet-container { background: #F4F5F2; }
+.leaflet-tooltip.steuer-tip { font-family: var(--font); font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(21, 24, 28, 0.12); color: var(--ink); white-space: nowrap; }
+.leaflet-tooltip.steuer-tip .xs { font-size: 12px; color: var(--ink-2); }
+.leaflet-tooltip.steuer-tip .muted { color: var(--ink-4); }
+.steuer-legende i.umrandet { background: #fff; border: 2px solid #3E454C; }
+.steuer-tabelle-wrap { max-height: 520px; overflow: auto; padding: 0 22px; }
+.steuer-tabelle { margin-top: 0; }
+.steuer-tabelle thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+.steuer-tabelle tbody tr { cursor: pointer; }
+.steuer-tabelle tbody tr:hover td { background: var(--col-bg); }
+.steuer-tabelle tr.unsere td:first-child { font-weight: 700; }
+.steuer-tabelle tr.aktiv td { background: var(--accent-soft); }
+.steuer-punkt { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; border: 1px solid rgba(0, 0, 0, 0.08); }
+@media (max-width: 720px) {
+  .leaflet-tooltip.steuer-tip { white-space: normal; width: 230px; }
+  .steuer-tabelle-wrap { padding: 0 12px; max-height: none; }
+  .steuer-tabelle th:nth-child(2), .steuer-tabelle td:nth-child(2) { display: none; }
+}

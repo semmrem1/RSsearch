@@ -55,6 +55,7 @@ export default function Layout() {
             <NavLink to="/inserate">Inserate</NavLink>
             <NavLink to="/karte">Karte</NavLink>
             <NavLink to="/radar">Radar</NavLink>
+            <NavLink to="/steuern">Steuern</NavLink>
             <NavLink to="/dokumente">Dokumente</NavLink>
           </nav>
           <div className="header-right">
@@ -93,6 +94,9 @@ export default function Layout() {
         </NavLink>
         <NavLink to="/radar">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><path d="M12 12l6-6" /></svg>Radar
+        </NavLink>
+        <NavLink to="/steuern">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M19 5L5 19" /><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /></svg>Steuern
         </NavLink>
         <NavLink to="/dokumente">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 2h8l6 6v14H6z" /><path d="M14 2v6h6" /></svg>Doku
