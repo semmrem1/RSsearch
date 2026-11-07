@@ -16,7 +16,7 @@ import { budget, ueberschussFarbe } from '../lib/budget';
 import { ampel, AMPEL_FARBE, AMPEL_LABEL } from '../lib/ampel';
 import AmpelInfo from '../components/AmpelInfo';
 import FinanzierungKarte from '../components/FinanzierungKarte';
-import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
+import { eigenkapital, tragbarkeit, quoteText, stufeFarbe, unterhaltEffektivPct } from '../lib/finanz';
 import ScoreInfo, { scoreFarbe } from '../components/ScoreInfo';
 import TeilenButton from '../components/TeilenButton';
 import ScoreManuell from '../components/ScoreManuell';
@@ -283,7 +283,7 @@ export default function Detail() {
       {(() => {
         const zEff = budgetDaten !== null && budgetDaten.zins_effektiv !== undefined ? Number(budgetDaten.zins_effektiv) : Number(haushalt.zins_effektiv);
         const ek = eigenkapital(haushalt, profiles, budgetDaten);
-        const t = tragbarkeit(o.preis_chf, haushalt, zEff, ek.total);
+        const t = tragbarkeit(o.preis_chf, haushalt, zEff, ek.total, unterhaltEffektivPct(haushalt, budgetDaten));
         const gs = gemeinde !== null ? { name: gemeinde.name, kanton: gemeinde.kanton, steuerfuss: gemeinde.steuerfuss, steuerfuss_kanton: gemeinde.steuerfuss_kanton !== undefined ? gemeinde.steuerfuss_kanton : null, steuerfuss_bezirk: gemeinde.steuerfuss_bezirk !== undefined ? gemeinde.steuerfuss_bezirk : null } : null;
         const b = budget(o.preis_chf, haushalt, profiles, budgetPosten, budgetDaten, gs);
         const scoreAuto = ue !== null ? ue.score_auto : (o.score_auto !== undefined ? o.score_auto : null);

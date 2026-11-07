@@ -32,6 +32,7 @@ export interface Haushalt {
   kaufnebenkosten_pct: number;
   ek_erweitert: number; // z.B. Darlehen Götti, standardmässig als Eigenkapital eingesetzt
   kinder: number; // für die Steuerschätzung (gemeinsame Veranlagung)
+  unterhalt_effektiv_pct: number; // realer Unterhalt in % des Preises (Effektiv-Sicht und Budget); nebenkosten_pct bleibt für die Bank-Sicht
 }
 
 export interface BudgetPosten { id: string; name: string; betrag_monat: number; kategorie: 'fix' | 'variabel' | 'sparen'; sort: number }
@@ -40,6 +41,8 @@ export interface ObjektBudgetDaten {
   posten?: Record<string, number>;
   extra?: { name: string; betrag: number }[];
   zins_effektiv?: number;
+  /** Unterhalt effektiv in % des Preises für dieses Objekt (fehlt = haushalt.unterhalt_effektiv_pct) */
+  unterhalt_effektiv?: number;
   weitere_einkuenfte?: number;
   /** Eigenkapital-Bausteine für dieses Objekt (fehlt = Standard aus Haushalt und Profilen) */
   ek?: { basis?: number; erweitert?: number; saeule3a?: Record<string, number> };

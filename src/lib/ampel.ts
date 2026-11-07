@@ -1,5 +1,5 @@
 import { budget } from './budget';
-import { eigenkapital, tragbarkeit } from './finanz';
+import { eigenkapital, tragbarkeit, unterhaltEffektivPct } from './finanz';
 import { chf } from './format';
 import { gemeindeAusZeile } from './steuern';
 import type { BudgetPosten, Haushalt, ObjektBudgetDaten, ObjektUebersicht, Profile } from './types';
@@ -40,7 +40,7 @@ export function ampel(o: ObjektUebersicht, h: Haushalt, profiles: Profile[], pos
 
   // 2. Eigenkapital und 3. Tragbarkeit (Bank-Sicht, kalkulatorischer Zins)
   const ek = eigenkapital(h, profiles, daten);
-  const t = tragbarkeit(o.preis_chf, h, daten !== undefined && daten !== null && daten.zins_effektiv !== undefined ? daten.zins_effektiv : null, ek.total);
+  const t = tragbarkeit(o.preis_chf, h, daten !== undefined && daten !== null && daten.zins_effektiv !== undefined ? daten.zins_effektiv : null, ek.total, unterhaltEffektivPct(h, daten));
   if (t === null) {
     p.push({ name: 'Eigenkapital', stufe: 'offen', text: 'kein Preis bekannt' });
     p.push({ name: 'Tragbarkeit', stufe: 'offen', text: 'kein Preis bekannt' });

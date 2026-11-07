@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../state/AppContext';
-import { eigenkapital, tragbarkeit, quoteText, stufeFarbe } from '../lib/finanz';
+import { eigenkapital, tragbarkeit, quoteText, stufeFarbe, unterhaltEffektivPct } from '../lib/finanz';
 import { chf } from '../lib/format';
 import type { Gemeinde, ObjektBudgetDaten } from '../lib/types';
 
@@ -29,9 +29,14 @@ export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, o
   const zinsEff = zinsOverride !== null ? zinsOverride : Number(haushalt.zins_effektiv);
   const [zinsText, setZinsText] = useState(String(zinsEff));
   useEffect(() => { setZinsText(String(zinsEff)); }, [zinsEff]);
+  const unterhaltStandard = unterhaltEffektivPct(haushalt);
+  const unterhaltOverride = daten !== null && daten.unterhalt_effektiv !== undefined ? Number(daten.unterhalt_effektiv) : null;
+  const unterhaltEff = unterhaltEffektivPct(haushalt, daten);
+  const [unterhaltText, setUnterhaltText] = useState(String(unterhaltEff));
+  useEffect(() => { setUnterhaltText(String(unterhaltEff)); }, [unterhaltEff]);
 
   const ek = eigenkapital(haushalt, profiles, daten);
-  const t = tragbarkeit(preis, haushalt, zinsEff, ek.total);
+  const t = tragbarkeit(preis, haushalt, zinsEff, ek.total, unterhaltEff);
   const eingerichtet = haushalt.eigenkapital !== null && haushalt.einkommen_jahr !== null;
 
   function zinsSetzen() {
@@ -39,6 +44,14 @@ export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, o
     if (daten === null || isNaN(v) || v < 0 || v > 15) { setZinsText(String(zinsEff)); return; }
     const neu: ObjektBudgetDaten = { ...daten };
     if (Math.abs(v - Number(haushalt.zins_effektiv)) < 1e-9) { delete neu.zins_effektiv; } else { neu.zins_effektiv = v; }
+    speichern(neu);
+  }
+
+  function unterhaltSetzen() {
+    const v = Number(unterhaltText.replace(',', '.'));
+    if (daten === null || isNaN(v) || v < 0 || v > 5) { setUnterhaltText(String(unterhaltEff)); return; }
+    const neu: ObjektBudgetDaten = { ...daten };
+    if (Math.abs(v - unterhaltStandard) < 1e-9) { delete neu.unterhalt_effektiv; } else { neu.unterhalt_effektiv = v; }
     speichern(neu);
   }
 
@@ -84,13 +97,21 @@ export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, o
     <>
       <div className="card-head">
         <h2 id="fin-h">Finanzierung</h2>
-        {leser ? <span className="xs muted">Zins effektiv {zinsEff} %</span> : (
+        {leser ? <span className="xs muted">Zins effektiv {zinsEff} % · Unterhalt {unterhaltEff} %</span> : (
+          <span style={{ display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <label className="xs muted" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             Zins effektiv
             <input className="input budget-input" style={{ width: 64 }} inputMode="decimal" aria-label="Effektiver Hypothekarzins für dieses Objekt" value={zinsText} onChange={(e) => setZinsText(e.target.value)} onBlur={zinsSetzen} onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }} />
             %
             {zinsOverride !== null ? <button type="button" className="linkbtn xs" title={'Zurück auf Standard ' + haushalt.zins_effektiv + ' %'} onClick={() => { if (daten !== null) { const neu = { ...daten }; delete neu.zins_effektiv; speichern(neu); } }}>↺</button> : null}
           </label>
+          <label className="xs muted" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            Unterhalt effektiv
+            <input className="input budget-input" style={{ width: 64 }} inputMode="decimal" aria-label="Effektiver Unterhalt in Prozent des Preises für dieses Objekt" value={unterhaltText} onChange={(e) => setUnterhaltText(e.target.value)} onBlur={unterhaltSetzen} onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }} />
+            %
+            {unterhaltOverride !== null ? <button type="button" className="linkbtn xs" title={'Zurück auf Standard ' + unterhaltStandard + ' %'} onClick={() => { if (daten !== null) { const neu = { ...daten }; delete neu.unterhalt_effektiv; speichern(neu); } }}>↺</button> : null}
+          </label>
+          </span>
         )}
       </div>
       {t === null ? <div className="small muted" style={{ marginTop: 10 }}>Kein Preis bekannt.</div> : !eingerichtet ? (
@@ -104,8 +125,8 @@ export default function FinanzierungKarte({ preis, daten, speichern, gemeinde, o
             <tbody>
               <tr><td>Hypothek <span className="xs muted">{(t.belehnung * 100).toFixed(0)} % Belehnung · Preis − Eigenkapital {chf(ek.total)}</span></td><td className="r" colSpan={2}>CHF {chf(t.hypothek)}</td></tr>
               <tr><td>Hypothekarzins</td><td className="r">{chf(t.bank.zinsen)}</td><td className="r">{chf(t.effektiv.zinsen)}</td></tr>
-              <tr><td>Nebenkosten, Unterhalt <span className="xs muted">{haushalt.nebenkosten_pct} %</span></td><td className="r">{chf(t.bank.nebenkosten)}</td><td className="r">{chf(t.effektiv.nebenkosten)}</td></tr>
-              <tr><td>Amortisation <span className="xs muted">auf 65 % in {haushalt.amortisation_jahre} J.</span></td><td className="r">{chf(t.bank.amortisation)}</td><td className="r">{chf(t.effektiv.amortisation)}</td></tr>
+              <tr><td>Nebenkosten, Unterhalt <span className="xs muted">Bank {haushalt.nebenkosten_pct} % · effektiv {t.effektiv.unterhaltPct} %</span></td><td className="r">{chf(t.bank.nebenkosten)}</td><td className="r">{chf(t.effektiv.nebenkosten)}</td></tr>
+              <tr><td>Amortisation <span className="xs muted">2. Hypothek über 2/3 in {haushalt.amortisation_jahre} J.</span></td><td className="r">{chf(t.bank.amortisation)}</td><td className="r">{chf(t.effektiv.amortisation)}</td></tr>
               <tr className="fin-summe"><td>Kosten pro Jahr</td><td className="r">{chf(t.bank.kosten)}</td><td className="r">{chf(t.effektiv.kosten)}</td></tr>
               <tr className="fin-summe"><td>Kosten pro Monat</td><td className="r">{chf(t.bank.kosten / 12)}</td><td className="r" style={{ fontSize: 16 }}>{chf(t.effektiv.kosten / 12)}</td></tr>
               <tr className="fin-summe"><td>Anteil am Einkommen</td><td className="r" style={{ color: stufeFarbe(t.bank.stufe) }}>{t.ekZuTief ? 'EK zu tief' : quoteText(t.bank)}</td><td className="r" style={{ color: stufeFarbe(t.effektiv.stufe) }}>{quoteText(t.effektiv)}</td></tr>

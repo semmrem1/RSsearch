@@ -1,5 +1,5 @@
 import type { BudgetPosten, Haushalt, ObjektBudgetDaten, Profile } from './types';
-import { eigenkapital, type Eigenkapital } from './finanz';
+import { amortisationJahr, eigenkapital, unterhaltEffektivPct, type Eigenkapital } from './finanz';
 import { steuerSchaetzung, type GemeindeSteuer, type SteuerSchaetzung } from './steuern';
 
 export interface BudgetZeile { id: string; name: string; betrag: number; standard: number; ueberschrieben: boolean; geschaetzt: boolean }
@@ -9,6 +9,7 @@ export interface Budget {
   weitereEinkuenfte: number;
   einkommen: number;
   zinsEffektiv: number;
+  unterhaltPct: number;
   ek: Eigenkapital;
   hypothek: number;
   wohnen: { zins: number; nebenkosten: number; amortisation: number; total: number };
@@ -49,8 +50,9 @@ export function budget(preis: number | null, h: Haushalt, profiles: Profile[], p
   const p = preis !== null ? preis : 0;
   const hypothek = Math.max(0, p - ek.total);
   const zins = runden(hypothek * zinsEffektiv / 100 / 12);
-  const nebenkosten = runden(p * Number(h.nebenkosten_pct) / 100 / 12);
-  const amortisation = runden(Math.max(0, hypothek - 0.65 * p) / Math.max(1, h.amortisation_jahre) / 12);
+  const unterhaltPct = unterhaltEffektivPct(h, o);
+  const nebenkosten = runden(p * unterhaltPct / 100 / 12);
+  const amortisation = runden(amortisationJahr(p, hypothek, h.amortisation_jahre) / 12);
   const wohnen = { zins, nebenkosten, amortisation, total: zins + nebenkosten + amortisation };
 
   const steuer = einkommen > 0 ? steuerFuerBudget(gemeinde, h, personen, weitereEinkuenfte) : null;
@@ -65,7 +67,7 @@ export function budget(preis: number | null, h: Haushalt, profiles: Profile[], p
   const ausgabenTotal = ausgaben.reduce((s, z) => s + z.betrag, 0);
   const ueberschuss = einkommen - wohnen.total - ausgabenTotal;
   return {
-    personen, weitereEinkuenfte, einkommen, zinsEffektiv, ek, hypothek, wohnen, ausgaben, ausgabenTotal, ueberschuss,
+    personen, weitereEinkuenfte, einkommen, zinsEffektiv, unterhaltPct, ek, hypothek, wohnen, ausgaben, ausgabenTotal, ueberschuss,
     sparquote: einkommen > 0 ? ueberschuss / einkommen : null,
     vollstaendig: einkommen > 0,
     steuer,

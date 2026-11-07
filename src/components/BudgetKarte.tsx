@@ -116,8 +116,8 @@ export default function BudgetKarte({ preis, daten, speichern, gemeinde }: { pre
       <div className="budget-block">
         <div className="budget-kopf"><span>Wohnkosten dieses Objekts</span><span className="tnum">− CHF {chf(b.wohnen.total)}</span></div>
         <div className="budget-zeile"><span>Hypozins {b.zinsEffektiv} % effektiv <span className="xs muted">auf CHF {chf(b.hypothek)} (Eigenkapital {chf(b.ek.total)}){leser ? '' : ' · Zins und Eigenkapital bei «Finanzierung» anpassbar'}</span></span><span /><span className="tnum">{chf(b.wohnen.zins)}</span></div>
-        <div className="budget-zeile"><span>Nebenkosten, Unterhalt <span className="xs muted">{haushalt.nebenkosten_pct} % vom Preis</span></span><span /><span className="tnum">{chf(b.wohnen.nebenkosten)}</span></div>
-        <div className="budget-zeile"><span>Amortisation 2. Hypothek <span className="xs muted">auf 65 % in {haushalt.amortisation_jahre} Jahren</span></span><span /><span className="tnum">{chf(b.wohnen.amortisation)}</span></div>
+        <div className="budget-zeile"><span>Nebenkosten, Unterhalt <span className="xs muted">{b.unterhaltPct} % vom Preis (effektiv)</span></span><span /><span className="tnum">{chf(b.wohnen.nebenkosten)}</span></div>
+        <div className="budget-zeile"><span>Amortisation 2. Hypothek <span className="xs muted">auf 2/3 Belehnung in {haushalt.amortisation_jahre} Jahren</span></span><span /><span className="tnum">{chf(b.wohnen.amortisation)}</span></div>
       </div>
 
       <div className="budget-block">

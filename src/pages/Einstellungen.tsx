@@ -202,13 +202,13 @@ export default function Einstellungen() {
 
           <section className="card pad" aria-labelledby="fin-h">
             <h2 id="fin-h">Haushalt &amp; Tragbarkeit</h2>
-            <p className="small muted" style={{ marginTop: 4 }}>Gemeinsame Werte für beide. Bankübliche Rechnung: kalkulatorischer Zins, Nebenkosten, Amortisation der 2. Hypothek auf 65 % Belehnung. Tragbar, wenn die Kosten unter dem Maximum liegen.</p>
+            <p className="small muted" style={{ marginTop: 4 }}>Gemeinsame Werte für beide. Bankübliche Rechnung: kalkulatorischer Zins, Nebenkosten, Amortisation der 2. Hypothek auf 2/3 Belehnung. Tragbar, wenn die Kosten unter dem Maximum liegen.</p>
             <div className="form-grid" style={{ marginTop: 12 }}>
               <Zahl id="ek" label="Eigenkapital" einheit="CHF" wert={h.eigenkapital} onChange={(v) => setH({ ...h, eigenkapital: v })} hinweis="Ersparnisse und Konto beider Personen; Säule 3a und erweitertes EK separat unten" />
               <Zahl id="ekerw" label="Erweitertes EK" einheit="CHF" wert={h.ek_erweitert} onChange={(v) => setH({ ...h, ek_erweitert: v !== null ? v : 0 })} hinweis="z.B. Darlehen Götti; wird auf jedes Inserat übernommen und ist dort anpassbar" />
               <Zahl id="eink" label="Haushaltseinkommen pro Jahr" einheit="CHF brutto" wert={h.einkommen_jahr} onChange={(v) => setH({ ...h, einkommen_jahr: v })} />
               <Zahl id="zins" label="Kalkulatorischer Zins" einheit="%" wert={h.zins_kalk} onChange={(v) => setH({ ...h, zins_kalk: v !== null ? v : 5 })} />
-              <Zahl id="nk" label="Nebenkosten" einheit="% des Preises" wert={h.nebenkosten_pct} onChange={(v) => setH({ ...h, nebenkosten_pct: v !== null ? v : 1 })} />
+              <Zahl id="nk" label="Nebenkosten (Bank)" einheit="% des Preises" wert={h.nebenkosten_pct} onChange={(v) => setH({ ...h, nebenkosten_pct: v !== null ? v : 1 })} hinweis="Bankübliche Pauschale für die Tragbarkeit, meist 1 %" />
               <Zahl id="amort" label="Amortisation" einheit="Jahre" wert={h.amortisation_jahre} onChange={(v) => setH({ ...h, amortisation_jahre: v !== null ? Math.round(v) : 15 })} />
               <Zahl id="bel" label="Max. Belehnung" einheit="%" wert={h.belehnung_max} onChange={(v) => setH({ ...h, belehnung_max: v !== null ? v : 80 })} />
               <Zahl id="trag" label="Max. Tragbarkeit" einheit="%" wert={h.tragbarkeit_max} onChange={(v) => setH({ ...h, tragbarkeit_max: v !== null ? v : 33 })} />
@@ -257,9 +257,10 @@ export default function Einstellungen() {
             <div className="form-grid" style={{ marginTop: 10 }}>
               <Zahl id="weitere" label="Weitere Einkünfte pro Monat" einheit="CHF" wert={h.weitere_einkuenfte_monat} onChange={(v) => setH({ ...h, weitere_einkuenfte_monat: v !== null ? v : 0 })} hinweis="Kinderzulagen, Nebenerwerb, Mieteinnahmen" />
               <Zahl id="zinseff" label="Effektiver Hypozins" einheit="%" wert={h.zins_effektiv} onChange={(v) => setH({ ...h, zins_effektiv: v !== null ? v : 1.5 })} hinweis="Für das Budget; die Tragbarkeit rechnet weiter mit dem kalkulatorischen Zins" />
+              <Zahl id="unterhalteff" label="Unterhalt effektiv" einheit="% des Preises" wert={h.unterhalt_effektiv_pct} onChange={(v) => setH({ ...h, unterhalt_effektiv_pct: v !== null ? v : 0.6 })} hinweis="Realer Unterhalt und Nebenkosten für Effektiv-Sicht und Budget; pro Inserat anpassbar. Die Bank rechnet weiter mit den Nebenkosten oben" />
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10 }}>
-              <button type="button" className="btn" onClick={haushaltSpeichern}>Einkünfte und Zins speichern</button>
+              <button type="button" className="btn" onClick={haushaltSpeichern}>Einkünfte, Zins und Unterhalt speichern</button>
               <span className="small muted tnum">Haushaltseinkommen: CHF {chf(budget(null, h, personen, posten).einkommen)} pro Monat</span>
             </div>
 
