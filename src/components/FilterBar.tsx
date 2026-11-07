@@ -115,6 +115,9 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
         <label className="f-check small">
           <input type="checkbox" checked={wert.ausgeschieden} onChange={(e) => set({ ausgeschieden: e.target.checked })} /> Ausgeschiedene
         </label>
+        <label className="f-check small" title="Von uns abgesagte Inserate und zusammengeführte Dubletten anzeigen">
+          <input type="checkbox" checked={wert.abgesagte} onChange={(e) => set({ abgesagte: e.target.checked })} /> Abgesagte &amp; Dubletten
+        </label>
         <label className="f-check small">
           <input type="checkbox" checked={wert.nurTragbar} onChange={(e) => set({ nurTragbar: e.target.checked })} /> Nur tragbar
         </label>

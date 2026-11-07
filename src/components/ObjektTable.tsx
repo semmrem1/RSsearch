@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { ObjektUebersicht } from '../lib/types';
 import { chf, pct, dateShort, typLabel, marktText } from '../lib/format';
@@ -48,16 +48,31 @@ function wert(r: ObjektUebersicht, key: string, ctx: SortCtx): number | string |
   }
 }
 
-function sortieren(rows: ObjektUebersicht[], s: Sortierung, ctx: SortCtx): ObjektUebersicht[] {
+function vergleichen(a: ObjektUebersicht, b: ObjektUebersicht, s: Sortierung, ctx: SortCtx): number {
   const f = s.dir === 'asc' ? 1 : -1;
+  const va = wert(a, s.key, ctx);
+  const vb = wert(b, s.key, ctx);
+  if (va === null && vb === null) { return 0; }
+  if (va === null) { return 1; } // leere Werte immer ans Ende
+  if (vb === null) { return -1; }
+  if (typeof va === 'number' && typeof vb === 'number') { return (va - vb) * f; }
+  return String(va).localeCompare(String(vb), 'de-CH', { numeric: true }) * f;
+}
+
+/**
+ * Sortiert stabil: Bei Gleichstand entscheidet «Erfasst» (neuste zuerst), dann die ID.
+ * Wichtig, weil der tägliche Lauf alle Inserate eines Tages mit identischem created_at anlegt;
+ * ohne festen Gleichstand-Entscheid springt die Reihenfolge, sobald die DB ein Objekt aktualisiert (z.B. nach Sternen).
+ */
+function sortieren(rows: ObjektUebersicht[], s: Sortierung, ctx: SortCtx): ObjektUebersicht[] {
   return rows.slice().sort((a, b) => {
-    const va = wert(a, s.key, ctx);
-    const vb = wert(b, s.key, ctx);
-    if (va === null && vb === null) { return 0; }
-    if (va === null) { return 1; } // leere Werte immer ans Ende
-    if (vb === null) { return -1; }
-    if (typeof va === 'number' && typeof vb === 'number') { return (va - vb) * f; }
-    return String(va).localeCompare(String(vb), 'de-CH', { numeric: true }) * f;
+    const r = vergleichen(a, b, s, ctx);
+    if (r !== 0) { return r; }
+    if (s.key !== 'erfasst') {
+      const e = vergleichen(a, b, STANDARD, ctx);
+      if (e !== 0) { return e; }
+    }
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 }
 
@@ -69,6 +84,10 @@ export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersic
   // Sterne, die in dieser Liste gesetzt wurden, sofort anzeigen (bis die Daten neu geladen sind)
   const [lokal, setLokal] = useState<Record<string, number>>({});
   const [sterneFehler, setSterneFehler] = useState<string | null>(null);
+  // Nach einer Bewertung in der Liste bleibt die angezeigte Reihenfolge stehen, bis eine andere Sortierung gewählt wird.
+  // Sonst springt die Zeile weg, wenn nach Ampel, Stufe, Bewertung oder Sternen sortiert ist.
+  const [eingefroren, setEingefroren] = useState<string[] | null>(null);
+  const angezeigt = useRef<string[]>([]);
 
   function sterne(r: ObjektUebersicht, userId: string): number {
     if (me !== null && userId === me.id && lokal[r.id] !== undefined) { return lokal[r.id]; }
@@ -80,6 +99,7 @@ export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersic
   async function sterneSetzen(r: ObjektUebersicht, n: number) {
     if (me === null || leser) { return; }
     const vorher = sterne(r, me.id);
+    if (eingefroren === null) { setEingefroren(angezeigt.current.slice()); }
     setLokal((alt) => ({ ...alt, [r.id]: n }));
     setSterneFehler(null);
     const { error } = await supabase.from('bewertungen').upsert({ objekt_id: r.id, user_id: me.id, sterne: n, updated_at: new Date().toISOString() });
@@ -99,6 +119,7 @@ export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersic
   };
 
   function klick(key: string) {
+    setEingefroren(null);
     if (sort.key === key) { setSort({ key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }); }
     // Zahlen und Datum zuerst absteigend wäre bei Preis unpraktisch: Text und Preis aufsteigend, Rest absteigend
     else { setSort({ key, dir: key === 'ort' || key === 'quelle' || key === 'preis' || key === 'chfm2' || key === 'stufe' || key === 'tragbar' || key === 'pendeln' ? 'asc' : 'desc' }); }
@@ -106,7 +127,17 @@ export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersic
 
   if (rows.length === 0) { return <div className="empty">Keine Inserate für diesen Filter.</div>; }
 
-  const sortiert = sortieren(rows, sort, ctx);
+  const normal = sortieren(rows, sort, ctx);
+  let sortiert = normal;
+  if (eingefroren !== null) {
+    const pos = new Map<string, number>();
+    eingefroren.forEach((id, i) => pos.set(id, i));
+    // Nur solange alle Zeilen bekannt sind (neue Zeilen durch Filterwechsel: normal sortieren)
+    if (rows.every((r) => pos.has(r.id))) {
+      sortiert = rows.slice().sort((a, b) => (pos.get(a.id) as number) - (pos.get(b.id) as number));
+    }
+  }
+  angezeigt.current = sortiert.map((r) => r.id);
   const neuFuerMich = (r: ObjektUebersicht): boolean => me !== null && r.letzte_aktivitaet_user !== null && r.letzte_aktivitaet_user !== me.id && r.letzte_aktivitaet_am !== null && (r.mein_besuch_am === null || r.letzte_aktivitaet_am > r.mein_besuch_am);
   /** Noch nie von mir geöffnet: bläulich hinterlegt, bis ich das Inserat einmal aufgerufen habe. */
   const ungelesen = (r: ObjektUebersicht): boolean => me !== null && !leser && r.mein_besuch_am === null;
@@ -191,7 +222,7 @@ export default function ObjektTable({ rows, onBewertet }: { rows: ObjektUebersic
         <select id="sort-mob" className="select" value={sort.key} onChange={(e) => klick(e.target.value)}>
           {spalten.map((s) => <option key={s.key} value={s.key}>{s.key.indexOf('p:') === 0 ? 'Sterne ' + s.label : s.label === 'Objekt' ? 'Ortschaft' : s.key === 'tage' ? 'Tage am Markt' : s.key === 'tragbar' ? 'Tragbarkeit' : s.key === 'pendeln' ? 'Pendelzeit' : s.key === 'budget' ? 'Budget-Überschuss' : s.key === 'ampel' ? 'Einschätzung' : s.key === 'score' ? 'Score (automatisch)' : s.key === 'bewertung' ? 'Objektbewertung' : s.label}</option>)}
         </select>
-        <button type="button" className="btn sm" onClick={() => setSort({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })} aria-label={sort.dir === 'asc' ? 'Aufsteigend, umkehren' : 'Absteigend, umkehren'}>
+        <button type="button" className="btn sm" onClick={() => { setEingefroren(null); setSort({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }); }} aria-label={sort.dir === 'asc' ? 'Aufsteigend, umkehren' : 'Absteigend, umkehren'}>
           {sort.dir === 'asc' ? '▲ auf' : '▼ ab'}
         </button>
       </div>

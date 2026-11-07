@@ -48,7 +48,8 @@ export function useObjekte() {
         .from('v_objekte_uebersicht')
         .select('*')
         .order('erstmals_gesehen', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .order('id');
       if (r.error) { errText = r.error.message; } else { data = r.data as ObjektUebersicht[]; }
     } catch (e) { errText = String(e); }
     if (data !== null) {

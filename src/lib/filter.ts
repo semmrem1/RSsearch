@@ -10,6 +10,7 @@ export interface ObjektFilter {
   phase: string; // 'alle' oder Phasennummer
   fav: string; // 'alle' oder Profil-ID
   ausgeschieden: boolean; // Phase 9 anzeigen
+  abgesagte: boolean; // von uns abgesagte und zusammengeführte Dubletten anzeigen (Standard: aus)
   pendelMax: number | null; // Minuten, bezogen auf die eingeloggte Person
   nurTragbar: boolean;
   nurUneinig: boolean;
@@ -17,7 +18,7 @@ export interface ObjektFilter {
   scoreMin: number | null; // automatischer Score 0..100, Mindestwert
 }
 
-export const FILTER_STANDARD: ObjektFilter = { q: '', orte: [], markt: 'alle', phase: 'alle', fav: 'alle', ausgeschieden: true, pendelMax: null, nurTragbar: false, nurUneinig: false, ampel: 'alle', scoreMin: null };
+export const FILTER_STANDARD: ObjektFilter = { q: '', orte: [], markt: 'alle', phase: 'alle', fav: 'alle', ausgeschieden: true, abgesagte: false, pendelMax: null, nurTragbar: false, nurUneinig: false, ampel: 'alle', scoreMin: null };
 
 export interface FilterKontext { me: string | null; haushalt: Haushalt; profiles?: Profile[]; posten?: BudgetPosten[] }
 
@@ -45,7 +46,12 @@ export function useObjektFilter(key: string, standard: ObjektFilter = FILTER_STA
 }
 
 export function filterAktiv(f: ObjektFilter, standard: ObjektFilter = FILTER_STANDARD): boolean {
-  return f.q.trim() !== '' || f.orte.length > 0 || f.markt !== standard.markt || f.phase !== standard.phase || f.fav !== standard.fav || f.ausgeschieden !== standard.ausgeschieden || f.pendelMax !== null || f.nurTragbar || f.nurUneinig || f.ampel !== 'alle' || f.scoreMin !== null;
+  return f.q.trim() !== '' || f.orte.length > 0 || f.markt !== standard.markt || f.phase !== standard.phase || f.fav !== standard.fav || f.ausgeschieden !== standard.ausgeschieden || f.abgesagte !== standard.abgesagte || f.pendelMax !== null || f.nurTragbar || f.nurUneinig || f.ampel !== 'alle' || f.scoreMin !== null;
+}
+
+/** Zusammengeführte Dublette oder von uns abgesagt: standardmässig ausgeblendet. */
+export function istAbgesagtOderDublette(o: ObjektUebersicht): boolean {
+  return (o.zusammengefuehrt_in !== null && o.zusammengefuehrt_in !== undefined) || o.stufe_code === 'abgesagt';
 }
 
 export function filtern(objekte: ObjektUebersicht[], f: ObjektFilter, ctx?: FilterKontext): ObjektUebersicht[] {
@@ -65,6 +71,7 @@ export function filtern(objekte: ObjektUebersicht[], f: ObjektFilter, ctx?: Filt
     if (f.nurUneinig && !uneinig(o)) { return false; }
     if (f.ampel !== 'alle' && ctx !== undefined && ampel(o, ctx.haushalt, ctx.profiles || [], ctx.posten || []).stufe !== f.ampel) { return false; }
     if (!f.ausgeschieden && o.stufe_phase === 9) { return false; }
+    if (!f.abgesagte && istAbgesagtOderDublette(o)) { return false; }
     if (f.orte.length > 0 && f.orte.indexOf(o.ort) === -1) { return false; }
     if (f.markt !== 'alle' && o.markt_status !== f.markt) { return false; }
     if (f.phase !== 'alle' && String(o.stufe_phase) !== f.phase) { return false; }
