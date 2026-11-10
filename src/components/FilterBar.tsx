@@ -112,18 +112,12 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
           <option value="alle">Favoriten: alle</option>
           {profiles.map((p) => <option key={p.id} value={p.id}>Favoriten {p.name.split(' ')[0]}{me !== null && me.id === p.id ? ' (ich)' : ''}</option>)}
         </select>
-        <label className="f-check small">
-          <input type="checkbox" checked={wert.ausgeschieden} onChange={(e) => set({ ausgeschieden: e.target.checked })} /> Ausgeschiedene
-        </label>
-        <label className="f-check small" title="Von uns abgesagte Inserate und zusammengeführte Dubletten anzeigen">
-          <input type="checkbox" checked={wert.abgesagte} onChange={(e) => set({ abgesagte: e.target.checked })} /> Abgesagte &amp; Dubletten
-        </label>
-        <label className="f-check small">
-          <input type="checkbox" checked={wert.nurTragbar} onChange={(e) => set({ nurTragbar: e.target.checked })} /> Nur tragbar
-        </label>
-        <label className="f-check small">
-          <input type="checkbox" checked={wert.nurUneinig} onChange={(e) => set({ nurUneinig: e.target.checked })} /> Nur uneinig
-        </label>
+        <div className="f-toggles" role="group" aria-label="Schnellfilter">
+          <button type="button" className="f-toggle" aria-pressed={wert.ausgeschieden} title="Ausgeschiedene Inserate (vom Markt, nicht erhalten) anzeigen" onClick={() => set({ ausgeschieden: !wert.ausgeschieden })}>Ausgeschiedene</button>
+          <button type="button" className="f-toggle" aria-pressed={wert.abgesagte} title="Von uns abgesagte Inserate und zusammengeführte Dubletten anzeigen" onClick={() => set({ abgesagte: !wert.abgesagte })}>Abgesagte &amp; Dubletten</button>
+          <button type="button" className="f-toggle" aria-pressed={wert.nurTragbar} title="Nur Inserate, die tragbar sind" onClick={() => set({ nurTragbar: !wert.nurTragbar })}>Nur tragbar</button>
+          <button type="button" className="f-toggle" aria-pressed={wert.nurUneinig} title="Nur Inserate, bei denen eure Bewertungen auseinandergehen" onClick={() => set({ nurUneinig: !wert.nurUneinig })}>Nur uneinig</button>
+        </div>
         <label className="f-check small" title="Automatischer Score 0 bis 100: nur Inserate ab diesem Wert">
           Score ab
           <input className="input" type="number" inputMode="numeric" min={0} max={100} step={5} placeholder="0" value={wert.scoreMin !== null ? wert.scoreMin : ''} onChange={(e) => set({ scoreMin: e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) })} style={{ width: 70, minHeight: 36 }} />

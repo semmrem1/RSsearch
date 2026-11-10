@@ -5,6 +5,8 @@ import { chf, typLabel, marktText } from './format';
 import { quelleDirekt } from './links';
 import type { ObjektUebersicht } from './types';
 
+export const FAVORIT_FARBE = '#F2B705';
+
 export function phasenFarbe(phase: number): string {
   if (phase === 9) { return '#8A9096'; }
   if (phase >= 2) { return '#2F7D4F'; }
@@ -45,7 +47,7 @@ export function zuKartenpunkt(o: ObjektUebersicht): KartenPunkt | null {
     '<div class="pp-facts">' + esc(fakten) + '</div>' +
     '<div class="pp-price">' + esc(chf(o.preis_chf, true)) + '</div>' +
     (o.markt_status !== 'aktiv' ? '<div class="pp-offline">' + esc(marktText(o.markt_status, o.offline_seit)) + '</div>' : '') +
-    '<div class="pp-stage">' + esc(o.stufe_name) + (genau ? '' : ' · Lage nur auf Ortsebene') + '</div>' +
+    '<div class="pp-stage">' + esc(o.stufe_name) + (favorit ? ' · ★ Favorit' : '') + (genau ? '' : ' · Lage nur auf Ortsebene') + '</div>' +
     '<div class="pp-links"><a class="pp-detail" href="/inserate/' + o.id + '" data-nav="' + o.id + '">Details</a>' + links + '</div>' +
     '</div>';
 
@@ -56,6 +58,7 @@ export function zuKartenpunkt(o: ObjektUebersicht): KartenPunkt | null {
     genau,
     label: (favorit ? '★ ' : '') + preisKurz(o.preis_chf),
     farbe: phasenFarbe(o.stufe_phase),
+    favorit,
     popupHtml: html,
   };
 }

@@ -5,7 +5,7 @@ import { useObjekte } from '../hooks/useObjekte';
 import { dateTime } from '../lib/format';
 import { useApp } from '../state/AppContext';
 import Karte from '../components/KarteLazy';
-import { phasenFarbe, zuKartenpunkt } from '../lib/kartenpunkte';
+import { FAVORIT_FARBE, phasenFarbe, zuKartenpunkt } from '../lib/kartenpunkte';
 import type { KartenPunkt } from '../components/Karte';
 
 export default function KartePage() {
@@ -40,8 +40,8 @@ export default function KartePage() {
           <span><i style={{ background: phasenFarbe(1) }} />Entdecken</span>
           <span><i style={{ background: phasenFarbe(2) }} />Im Prozess</span>
           <span><i style={{ background: phasenFarbe(9) }} />Ausgeschieden</span>
-          <span><i className="ungenau" />Gestrichelt: nur Ort bekannt ({nurOrt}), Position ungefähr</span>
-          <span>★ Favorit</span>
+          <span><i style={{ background: FAVORIT_FARBE, border: '1px solid #15181C' }} />★ Favorit (von mindestens einer Person)</span>
+          <span><i className="ungenau" />Gestrichelt: genaue Adresse unbekannt ({nurOrt}), Marker steht ungefähr im Ort</span>
         </div>
       </section>
 
