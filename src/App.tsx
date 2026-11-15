@@ -35,6 +35,7 @@ export default function App() {
           <Route path="/" element={<Uebersicht />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/inserate" element={<Inserate />} />
+          <Route path="/miete" element={<Inserate key="miete" angebot="miete" />} />
           <Route path="/inserate/:id" element={<Detail />} />
           <Route path="/karte" element={<KartePage />} />
           <Route path="/radar" element={<Radar />} />

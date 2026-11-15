@@ -1,5 +1,7 @@
 export type MarktStatus = 'aktiv' | 'reserviert' | 'verkauft' | 'offline' | 'unbekannt';
 export type ObjektTyp = 'wohnung' | 'haus' | 'andere';
+/** Kauf- oder Mietobjekt. Bei 'miete' ist preis_chf die Bruttomiete pro Monat. */
+export type Angebot = 'kauf' | 'miete';
 
 export type Rolle = 'mitglied' | 'leser';
 
@@ -142,6 +144,12 @@ export interface Objekt {
   score_manuell_grund?: string | null;
   score_manuell_von?: string | null;
   score_manuell_am?: string | null;
+  /** fehlt bei alten Cache-Daten: dann Kauf */
+  angebot?: Angebot;
+  /** Mietobjekte: Bezugstermin laut Inserat */
+  verfuegbar_ab?: string | null;
+  /** Mietobjekte: Nebenkosten pro Monat (in preis_chf enthalten) */
+  nebenkosten_chf?: number | null;
   created_at: string;
   updated_at: string;
 }

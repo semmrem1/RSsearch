@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useApp } from '../state/AppContext';
 import { dateTime } from '../lib/format';
@@ -27,6 +27,7 @@ export function Avatar({ id, size }: { id: string | null; size?: 'sm' }) {
 
 export default function Layout() {
   const { me, profiles, leser } = useApp();
+  const ort = useLocation();
   const [lastRun, setLastRun] = useState<LaufProtokoll[] | null>(null);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function Layout() {
             <NavLink to="/" end>Übersicht</NavLink>
             <NavLink to="/pipeline">Pipeline</NavLink>
             <NavLink to="/inserate">Inserate</NavLink>
+            <NavLink to="/miete">Miete</NavLink>
             <NavLink to="/karte">Karte</NavLink>
             <NavLink to="/radar">Radar</NavLink>
             <NavLink to="/steuern">Steuern</NavLink>
@@ -86,7 +88,8 @@ export default function Layout() {
         <NavLink to="/pipeline">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="4" height="13" rx="1" /></svg>Pipeline
         </NavLink>
-        <NavLink to="/inserate">
+        {/* Miete hat auf dem Handy keinen eigenen Tab: Umschalter Kauf / Miete auf der Seite Inserate */}
+        <NavLink to="/inserate" className={({ isActive }) => (isActive || ort.pathname === '/miete' ? 'active' : '')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>Inserate
         </NavLink>
         <NavLink to="/karte">

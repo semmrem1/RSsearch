@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
-import type { ObjektTyp } from '../lib/types';
+import type { Angebot, ObjektTyp } from '../lib/types';
 import { istDirektlink } from '../lib/links';
 
 interface Props {
   onClose: () => void;
   onSaved: (id: string) => void;
+  /** Kauf (Standard) oder Miete: bei Miete ist der Preis die Bruttomiete pro Monat */
+  angebot?: Angebot;
 }
 
-export default function ObjektForm({ onClose, onSaved }: Props) {
+export default function ObjektForm({ onClose, onSaved, angebot = 'kauf' }: Props) {
+  const miete = angebot === 'miete';
   const [ort, setOrt] = useState('');
   const [plz, setPlz] = useState('');
   const [adresse, setAdresse] = useState('');
@@ -48,6 +51,7 @@ export default function ObjektForm({ onClose, onSaved }: Props) {
       notizen: notizen || null,
       bild_url: bildUrl.trim() || null,
       stufe_code: 'vorgemerkt',
+      angebot,
     }).select('id').single();
     if (err || data === null) { setError(err ? err.message : 'Unbekannter Fehler'); setBusy(false); return; }
     await supabase.from('objekt_quellen').insert({ objekt_id: data.id, makler, externe_id: externeId || null, url: url.trim(), preis_chf: preisNum ? Number(preisNum) : null });
@@ -59,7 +63,7 @@ export default function ObjektForm({ onClose, onSaved }: Props) {
     <div className="modal-bg" role="dialog" aria-modal="true" aria-labelledby="of-h" onClick={onClose}>
       <form className="card modal" onSubmit={submit} onClick={(e) => e.stopPropagation()}>
         <div className="card-head">
-          <h2 id="of-h">Inserat manuell erfassen</h2>
+          <h2 id="of-h">{miete ? 'Mietobjekt manuell erfassen' : 'Inserat manuell erfassen'}</h2>
           <button type="button" className="btn sm" onClick={onClose}>Schliessen</button>
         </div>
         <div className="form-grid">
@@ -73,7 +77,7 @@ export default function ObjektForm({ onClose, onSaved }: Props) {
           </div>
           <div className="field"><label htmlFor="f-zi">Zimmer</label><input id="f-zi" className="input" inputMode="decimal" value={zimmer} onChange={(e) => setZimmer(e.target.value)} placeholder="4.5" /></div>
           <div className="field"><label htmlFor="f-m2">Wohnfläche m²</label><input id="f-m2" className="input" inputMode="numeric" value={flaeche} onChange={(e) => setFlaeche(e.target.value)} /></div>
-          <div className="field"><label htmlFor="f-preis">Preis CHF</label><input id="f-preis" className="input" inputMode="numeric" value={preis} onChange={(e) => setPreis(e.target.value)} placeholder="1'950'000" /></div>
+          <div className="field"><label htmlFor="f-preis">{miete ? 'Miete CHF pro Monat (brutto)' : 'Preis CHF'}</label><input id="f-preis" className="input" inputMode="numeric" value={preis} onChange={(e) => setPreis(e.target.value)} placeholder={miete ? "3'200" : "1'950'000"} /></div>
           <div className="field"><label htmlFor="f-bj">Baujahr</label><input id="f-bj" className="input" inputMode="numeric" value={baujahr} onChange={(e) => setBaujahr(e.target.value)} /></div>
           <div className="field"><label htmlFor="f-hz">Heizung</label><input id="f-hz" className="input" value={heizung} onChange={(e) => setHeizung(e.target.value)} placeholder="Wärmepumpe, Gas, Öl …" /></div>
           <div className="field"><label htmlFor="f-mk">Makler *</label><input id="f-mk" className="input" value={makler} onChange={(e) => setMakler(e.target.value)} placeholder="Walde, MoneyPark …" required /></div>

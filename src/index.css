@@ -101,6 +101,9 @@ main { max-width: 1800px; margin: 0 auto; padding: 28px 32px; display: flex; fle
 .seg { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: var(--radius-s); }
 .seg button { min-height: 36px; padding: 0 12px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; background: transparent; color: var(--ink-3); }
 .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); }
+.seg a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--ink-3); text-decoration: none; }
+.seg a.active { background: var(--accent-soft); color: var(--accent-dark); }
+.angebot-seg { background: var(--card); border: 1px solid var(--line); }
 
 /* Table */
 .table-wrap { overflow-x: auto; }

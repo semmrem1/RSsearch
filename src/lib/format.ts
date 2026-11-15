@@ -74,11 +74,22 @@ export function statusLabel(s: string): string {
 }
 
 /** Marktstatus mit Datum, z.B. "Offline seit 19.10.2026" */
-export function marktText(status: string, seit: string | null | undefined, kurz = false): string {
+export function marktText(status: string, seit: string | null | undefined, kurz = false, miete = false): string {
   const d = seit ? (kurz ? dateShort(seit) : dateLong(seit)) : '';
   if (status === 'offline') { return (kurz ? 'offline' : 'Offline genommen') + (d ? ' seit ' + d : ''); }
-  if (status === 'verkauft') { return (kurz ? 'verkauft' : 'Verkauft') + (d ? ' seit ' + d : ''); }
+  if (status === 'verkauft') { return (miete ? (kurz ? 'vermietet' : 'Vermietet') : (kurz ? 'verkauft' : 'Verkauft')) + (d ? ' seit ' + d : ''); }
   if (status === 'reserviert') { return kurz ? 'reserviert' : 'Reserviert'; }
   if (status === 'aktiv') { return kurz ? 'aktiv' : 'Aktiv am Markt'; }
   return statusLabel(status);
+}
+
+/** Mietobjekt? Alte Cache-Daten ohne Feld gelten als Kauf. */
+export function istMiete(o: { angebot?: string | null }): boolean {
+  return o.angebot === 'miete';
+}
+
+/** Miete pro m² und Jahr (übliche Vergleichsgrösse bei Mietobjekten). */
+export function mieteProM2Jahr(preis: number | null | undefined, flaeche: number | null | undefined): number | null {
+  if (preis === null || preis === undefined || !flaeche) { return null; }
+  return (preis * 12) / flaeche;
 }

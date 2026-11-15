@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { geocode, geoSuchtext } from '../lib/geo';
 import { direktQuelle } from '../lib/links';
-import type { ObjektUebersicht } from '../lib/types';
+import type { Angebot, ObjektUebersicht } from '../lib/types';
 import { useApp } from '../state/AppContext';
 
 // Pro Browser-Session nur einmal pro Objekt versuchen (Seitenwechsel, StrictMode)
@@ -32,9 +32,13 @@ function cacheLesen(): { daten: ObjektUebersicht[]; stand: string } | null {
   } catch { return null; }
 }
 
-export function useObjekte() {
+/**
+ * Lädt alle Objekte und gibt jene des gewünschten Angebots zurück (Standard: Kauf).
+ * Mietobjekte erscheinen nur auf der Seite "Miete"; Übersicht, Pipeline, Karte und Inserate bleiben beim Kauf.
+ */
+export function useObjekte(angebot: Angebot = 'kauf') {
   const { leser } = useApp();
-  const [objekte, setObjekte] = useState<ObjektUebersicht[]>(() => { const c = cacheLesen(); return c !== null ? c.daten : []; });
+  const [alle, setObjekte] = useState<ObjektUebersicht[]>(() => { const c = cacheLesen(); return c !== null ? c.daten : []; });
   const [loading, setLoading] = useState(() => cacheLesen() === null);
   const [error, setError] = useState<string | null>(null);
   const [offlineStand, setOfflineStand] = useState<string | null>(null);
@@ -67,7 +71,7 @@ export function useObjekte() {
   // Fehlende Koordinaten im Hintergrund ermitteln und in der DB ablegen
   useEffect(() => {
     if (loading || leser) { return; }
-    const offen = objekte.filter((o) => brauchtGeo(o) && !geoVersucht.has(o.id));
+    const offen = alle.filter((o) => brauchtGeo(o) && !geoVersucht.has(o.id));
     if (offen.length === 0) { return; }
     let abgebrochen = false;
     setGeoOffen(offen.length);
@@ -90,18 +94,20 @@ export function useObjekte() {
       }
     })();
     return () => { abgebrochen = true; setGeoOffen(0); };
-  }, [loading, objekte.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, alle.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fehlende Haupt- und Galeriebilder serverseitig sichern lassen (einmal pro Session)
   useEffect(() => {
-    if (loading || leser || bildLaufGestartet || objekte.length === 0) { return; }
+    if (loading || leser || bildLaufGestartet || alle.length === 0) { return; }
     bildLaufGestartet = true;
-    const brauchtHaupt = objekte.some(brauchtBild);
+    const brauchtHaupt = alle.some(brauchtBild);
     supabase.functions.invoke('bild-sichern', { body: { limit: brauchtHaupt ? 20 : 10 } }).then(({ data }) => {
       const res = data as { gesichert?: number; galerie_gesichert?: number } | null;
       if (res !== null && ((res.gesichert || 0) > 0 || (res.galerie_gesichert || 0) > 0)) { reload(); }
     });
-  }, [loading, objekte, reload]);
+  }, [loading, alle, reload]);
+
+  const objekte = useMemo(() => alle.filter((o) => (o.angebot === 'miete' ? 'miete' : 'kauf') === angebot), [alle, angebot]);
 
   return { objekte, loading, error, reload, geoOffen, offlineStand };
 }

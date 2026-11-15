@@ -16,8 +16,8 @@ export default function ZusammenfuehrenModal({ objekt, onClose, onDone }: Props)
 
   useEffect(() => {
     supabase.from('v_objekte_uebersicht').select('*').neq('id', objekt.id).order('ort')
-      .then(({ data }) => { if (data) { setAlle(data as ObjektUebersicht[]); } });
-  }, [objekt.id]);
+      .then(({ data }) => { if (data) { setAlle((data as ObjektUebersicht[]).filter((x) => (x.angebot === 'miete') === (objekt.angebot === 'miete'))); } });
+  }, [objekt.id, objekt.angebot]);
 
   const kandidat = (o: ObjektUebersicht): boolean => {
     if (o.ort.toLowerCase() !== objekt.ort.toLowerCase()) { return false; }

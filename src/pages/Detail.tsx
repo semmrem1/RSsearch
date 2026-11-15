@@ -21,7 +21,7 @@ import ScoreInfo, { scoreFarbe } from '../components/ScoreInfo';
 import TeilenButton from '../components/TeilenButton';
 import ScoreManuell from '../components/ScoreManuell';
 import type { ExposeExtrakt, Gemeinde, ObjektUebersicht } from '../lib/types';
-import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText } from '../lib/format';
+import { chf, pct, dateShort, dateLong, dateTime, bytes, typLabel, marktText, istMiete, mieteProM2Jahr } from '../lib/format';
 import type { Objekt, Quelle, Snapshot, Aktivitaet, Dokument, Standortfaktor, AktivitaetTyp } from '../lib/types';
 
 export default function Detail() {
@@ -111,6 +111,8 @@ export default function Detail() {
 
   if (missing) { return <div className="empty">Objekt nicht gefunden. <Link to="/inserate">Zurück</Link></div>; }
   if (o === null) { return <div className="empty">Lade …</div>; }
+  // Mietobjekt: preis_chf ist die Bruttomiete pro Monat; Finanzierung, Budget, Ampel und Score gelten nur für den Kauf
+  const miete = istMiete(o);
 
   const stufe = stufeByCode(o.stufe_code);
   const priceSnaps = snaps.filter((s) => s.typ === 'preis' || s.typ === 'erfasst').slice().reverse();
@@ -225,7 +227,8 @@ export default function Detail() {
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <span className="chip accent">{stufe !== null ? stufe.name : o.stufe_code}</span>
-            <span className={'chip ' + (o.markt_status === 'aktiv' ? 'green' : 'warm')}>{marktText(o.markt_status, o.offline_seit)}</span>
+            {miete ? <span className="chip neutral">Mietobjekt</span> : null}
+            <span className={'chip ' + (o.markt_status === 'aktiv' ? 'green' : 'warm')}>{marktText(o.markt_status, o.offline_seit, false, miete)}</span>
             <span className="xs muted">Erstmals gesehen {dateLong(o.erstmals_gesehen)} · zuletzt bestätigt {dateLong(o.zuletzt_gesehen)}</span>
           </div>
           <h1>{o.ort} · {o.zimmer !== null ? o.zimmer + '-Zimmer-' : ''}{typLabel(o.typ)}{o.titel ? ' «' + o.titel + '»' : ''}</h1>
@@ -239,7 +242,7 @@ export default function Detail() {
           )}
           <TeilenButton style={{ minHeight: 44 }} inhalt={{
             titel: o.ort + ' · ' + (o.zimmer !== null ? o.zimmer + '-Zimmer-' : '') + typLabel(o.typ),
-            text: [o.adresse ? o.adresse : null, o.preis_chf !== null ? chf(o.preis_chf, true) : null, o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : null].filter(Boolean).join(' · '),
+            text: [o.adresse ? o.adresse : null, o.preis_chf !== null ? chf(o.preis_chf, true) + (miete ? ' pro Monat' : '') : null, o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : null].filter(Boolean).join(' · '),
             pfad: '/inserate/' + o.id,
           }} />
           {!leser ? (
@@ -256,7 +259,7 @@ export default function Detail() {
 
       {o.markt_status === 'offline' || o.markt_status === 'verkauft' ? (
         <div className="notice" role="status">
-          <strong>{marktText(o.markt_status, o.offline_seit)}.</strong> Der tägliche Lauf hat das Inserat beim Makler nicht mehr gefunden. Taucht es wieder auf, wird es automatisch wieder aktiv.
+          <strong>{marktText(o.markt_status, o.offline_seit, false, miete)}.</strong> Der tägliche Lauf hat das Inserat beim Makler nicht mehr gefunden. Taucht es wieder auf, wird es automatisch wieder aktiv.
         </div>
       ) : null}
 
@@ -297,6 +300,22 @@ export default function Detail() {
             {sub !== undefined ? <span className="xs muted ek-sub">{sub}</span> : null}
           </div>
         );
+        if (miete) {
+          const m2 = mieteProM2Jahr(o.preis_chf, o.flaeche_m2);
+          const anteil = o.preis_chf !== null && haushalt.einkommen_jahr ? (o.preis_chf * 12) / Number(haushalt.einkommen_jahr) : null;
+          return (
+            <section className="ek-strip" aria-label="Mietobjekt auf einen Blick">
+              {kpi('Miete pro Monat', chf(o.preis_chf, true), (o.nebenkosten_chf !== null && o.nebenkosten_chf !== undefined ? 'inkl. NK CHF ' + chf(o.nebenkosten_chf) : 'brutto laut Inserat') + (m2 !== null ? ' · CHF ' + chf(m2) + '/m² im Jahr' : '') + (lastPriceChange ? ' · geändert ' + dateShort(lastPriceChange.datum) : ''))}
+              {kpi('Objekt', (o.zimmer !== null ? o.zimmer + ' Zi' : '–') + ' · ' + (o.flaeche_m2 !== null ? o.flaeche_m2 + ' m²' : '–'), typLabel(o.typ) + (o.baujahr !== null ? ' · Baujahr ' + o.baujahr : '') + (o.heizung ? ' · ' + o.heizung : ''))}
+              {kpi('Bezug', o.verfuegbar_ab ? o.verfuegbar_ab : '–', 'verfügbar ab, laut Inserat')}
+              {kpi('Am Markt', (ue !== null ? ue.tage_am_markt : 0) + ' Tage', 'seit ' + dateShort(o.erstmals_gesehen) + ' · zuletzt ' + dateShort(o.zuletzt_gesehen), ue !== null && ue.tage_am_markt > 90 ? 'var(--warm-dark)' : undefined)}
+              {kpi('Anteil am Einkommen', anteil !== null ? (anteil * 100).toFixed(0) + ' %' : '–', anteil !== null ? 'Miete im Jahr CHF ' + chf((o.preis_chf as number) * 12) + ' · Faustregel max. 33 % vom Brutto' : 'Einkommen in Einstellungen', anteil !== null ? (anteil > 0.33 ? 'var(--warm)' : 'var(--green)') : undefined)}
+              {kpi('Pendeln ÖV', profiles.map((p) => p.kuerzel + ' ' + (pz[p.id] ? pz[p.id].minuten + "'" : '–')).join(' · '), profiles.map((p) => (pz[p.id] && pz[p.id].nach ? p.kuerzel + ' → ' + pz[p.id].nach : null)).filter((x) => x !== null).join(' · ') || 'Arbeitsort in Einstellungen')}
+              {kpi('Objektbewertung', ue !== null && ue.score_gesamt !== null ? Number(ue.score_gesamt).toFixed(1) : '–', profiles.map((p) => p.kuerzel + ' ' + (ue !== null && ue.kriterien_scores[p.id] !== undefined ? Number(ue.kriterien_scores[p.id]).toFixed(1) : '–')).join(' · ') + ' · gewichtete Kriterien')}
+              {kpi('Steuerfuss', gemeinde !== null && gemeinde.steuerfuss !== null ? gemeinde.steuerfuss + ' %' : '–', gemeinde !== null ? gemeinde.name + ' ' + gemeinde.kanton + (gemeinde.steuerfuss_jahr ? ' · ' + gemeinde.steuerfuss_jahr : '') + (gemeinde.steuerfuss_kanton ? ' · gesamt ' + (Number(gemeinde.steuerfuss) + Number(gemeinde.steuerfuss_kanton) + Number(gemeinde.steuerfuss_bezirk || 0)) + ' %' : '') : o.ort)}
+            </section>
+          );
+        }
         return (
           <>
           <section className="ek-strip" aria-label="Entscheid auf einen Blick">
@@ -328,14 +347,14 @@ export default function Detail() {
         );
       })()}
 
-      <div className="entscheid-grid">
-        <section className="card pad" aria-labelledby="fin-h">
+      <div className={miete ? undefined : 'entscheid-grid'}>
+        {miete ? null : <section className="card pad" aria-labelledby="fin-h">
           <FinanzierungKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} gemeinde={gemeinde} ort={o.ort} />
-        </section>
-        <section className="card pad" aria-labelledby="budget-h">
+        </section>}
+        {miete ? null : <section className="card pad" aria-labelledby="budget-h">
           <div className="card-head"><h2 id="budget-h">Budget pro Monat</h2><span className="xs muted">Einkommen nach Pensum, Wohnkosten, Ausgaben</span></div>
           <BudgetKarte preis={o.preis_chf} daten={budgetDaten} speichern={budgetSpeichern} gemeinde={gemeinde} />
-        </section>
+        </section>}
         <section className="card pad" aria-labelledby="krit-h">
           <div className="card-head"><h2 id="krit-h">Kriterien &amp; Bewertung</h2><span className="xs muted">1 schlecht · 5 sehr gut · gewichtet nach eurem Score-Modell</span></div>
           <KriterienGrid objektId={o.id} onChange={() => load()} />
@@ -346,13 +365,13 @@ export default function Detail() {
         <div className="main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           <section className="card pad" aria-labelledby="price-h">
-            <div className="card-head"><h2 id="price-h">Preis- und Inseratsverlauf</h2><span className="small muted">Jede Änderung, die der tägliche Lauf erkennt</span></div>
+            <div className="card-head"><h2 id="price-h">{miete ? 'Miet- und Inseratsverlauf' : 'Preis- und Inseratsverlauf'}</h2><span className="small muted">Jede Änderung, die der tägliche Lauf erkennt</span></div>
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 16 }}>
               <div style={{ flex: '1 1 320px', minWidth: 0 }}>
                 <div className="bars">
                   {series.map((p, i) => (
                     <div key={i} className={'bar' + (i === series.length - 1 ? ' cur' : '')}>
-                      <span className="xs tnum" style={{ color: 'var(--ink-2)', textAlign: 'center', lineHeight: 1.2 }}>{(p.v / 1000000).toFixed(2)} M{o.flaeche_m2 ? <><br /><span className="muted">{chf(p.v / o.flaeche_m2)}/m²</span></> : null}</span>
+                      <span className="xs tnum" style={{ color: 'var(--ink-2)', textAlign: 'center', lineHeight: 1.2 }}>{miete ? chf(p.v) : (p.v / 1000000).toFixed(2) + ' M'}{o.flaeche_m2 ? <><br /><span className="muted">{chf(miete ? (p.v * 12) / o.flaeche_m2 : p.v / o.flaeche_m2)}/m²{miete ? ' J.' : ''}</span></> : null}</span>
                       <i style={{ height: maxV ? Math.max(8, Math.round((p.v / maxV) * 80)) + '%' : '8%' }} />
                     </div>
                   ))}
@@ -365,7 +384,7 @@ export default function Detail() {
                 {snaps.slice(0, 8).map((s) => {
                   const labels: Record<string, string> = { erfasst: 'Erfasst', preis: 'Preis', status: 'Status', flaeche: 'Fläche', zimmer: 'Zimmer', bestaetigt: 'Bestätigt', neue_quelle: 'Neue Quelle', dublette: 'Dublette', sonstiges: 'Update' };
                   let val = s.kommentar || '';
-                  if (s.typ === 'status') { val = marktText(s.alt || '', null, true) + ' → ' + marktText(s.neu || '', null, true) + (s.neu === 'offline' ? ' · beim Makler nicht mehr gefunden' : s.neu === 'reserviert' ? ' · beim Makler als reserviert markiert' : ''); }
+                  if (s.typ === 'status') { val = marktText(s.alt || '', null, true, miete) + ' → ' + marktText(s.neu || '', null, true, miete) + (s.neu === 'offline' ? ' · beim Makler nicht mehr gefunden' : s.neu === 'reserviert' ? ' · beim Makler als reserviert markiert' : ''); }
                   else if (s.typ === 'preis') { val = 'CHF ' + chf(Number(s.alt)) + ' → ' + chf(Number(s.neu)) + ' (' + pct(Number(s.neu) - Number(s.alt), Number(s.alt)) + ')'; }
                   else if (s.typ === 'erfasst') { val = (s.kommentar || '') + (s.neu ? ' · CHF ' + chf(Number(s.neu)) : ''); }
                   else if (s.alt || s.neu) { val = (s.alt || '') + ' → ' + (s.neu || '') + (s.kommentar ? ' · ' + s.kommentar : ''); }
@@ -427,7 +446,7 @@ export default function Detail() {
                     <span className="xs muted" title={q.externe_id || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 140 }}>{q.externe_id || ''}</span>
                   </div>
                   {q.kontakt ? <span className="small" style={{ color: 'var(--ink-2)' }}>{q.kontakt}</span> : null}
-                  <span className="xs muted"><span style={q.status !== 'aktiv' ? { color: 'var(--warm-dark)', fontWeight: 600 } : undefined}>{marktText(q.status, q.offline_seit)}</span> · erfasst {dateShort(q.erstmals_gesehen)} · zuletzt {dateShort(q.zuletzt_gesehen)}{q.preis_chf !== null ? ' · CHF ' + chf(q.preis_chf) : ''}</span>
+                  <span className="xs muted"><span style={q.status !== 'aktiv' ? { color: 'var(--warm-dark)', fontWeight: 600 } : undefined}>{marktText(q.status, q.offline_seit, false, miete)}</span> · erfasst {dateShort(q.erstmals_gesehen)} · zuletzt {dateShort(q.zuletzt_gesehen)}{q.preis_chf !== null ? ' · CHF ' + chf(q.preis_chf) : ''}</span>
                 </div>
               ))}
             </div>

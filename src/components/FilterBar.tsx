@@ -11,8 +11,12 @@ interface Props {
   treffer: number;
   standard?: ObjektFilter;
   /** Felder, die auf dieser Seite nicht angeboten werden */
-  ohne?: ('phase' | 'markt' | 'q')[];
+  ohne?: FilterFeld[];
+  /** Mietobjekte: Begriffe anpassen (vermietet statt verkauft) */
+  miete?: boolean;
 }
+
+type FilterFeld = 'phase' | 'markt' | 'q' | 'ampel' | 'tragbar' | 'score';
 
 function OrtAuswahl({ objekte, gewaehlt, onChange }: { objekte: ObjektUebersicht[]; gewaehlt: string[]; onChange: (orte: string[]) => void }) {
   const [offen, setOffen] = useState(false);
@@ -72,11 +76,11 @@ function OrtAuswahl({ objekte, gewaehlt, onChange }: { objekte: ObjektUebersicht
   );
 }
 
-export default function FilterBar({ objekte, wert, onChange, treffer, standard, ohne }: Props) {
+export default function FilterBar({ objekte, wert, onChange, treffer, standard, ohne, miete }: Props) {
   const { stufen, profiles, me } = useApp();
   const std = standard !== undefined ? standard : FILTER_STANDARD;
   const phasen = Array.from(new Map(stufen.map((s) => [s.phase, s.phase_name])).entries());
-  const zeige = (k: 'phase' | 'markt' | 'q') => ohne === undefined || ohne.indexOf(k) === -1;
+  const zeige = (k: FilterFeld) => ohne === undefined || ohne.indexOf(k) === -1;
   const set = (patch: Partial<ObjektFilter>) => onChange({ ...wert, ...patch });
 
   return (
@@ -91,7 +95,7 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
             <option value="alle">Markt: alle</option>
             <option value="aktiv">Aktiv am Markt</option>
             <option value="reserviert">Reserviert</option>
-            <option value="verkauft">Verkauft</option>
+            <option value="verkauft">{miete ? 'Vermietet' : 'Verkauft'}</option>
             <option value="offline">Nicht mehr online</option>
           </select>
         ) : null}
@@ -101,13 +105,15 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
             {phasen.map(([p, n]) => <option key={p} value={String(p)}>{n}</option>)}
           </select>
         ) : null}
-        <select className="select" aria-label="Einschätzung" value={wert.ampel} onChange={(e) => set({ ampel: e.target.value as ObjektFilter['ampel'] })}>
-          <option value="alle">Einschätzung: alle</option>
-          <option value="gruen">🟢 {AMPEL_LABEL.gruen}</option>
-          <option value="gelb">🟡 {AMPEL_LABEL.gelb}</option>
-          <option value="rot">🔴 {AMPEL_LABEL.rot}</option>
-          <option value="grau">⚪ {AMPEL_LABEL.grau}</option>
-        </select>
+        {zeige('ampel') ? (
+          <select className="select" aria-label="Einschätzung" value={wert.ampel} onChange={(e) => set({ ampel: e.target.value as ObjektFilter['ampel'] })}>
+            <option value="alle">Einschätzung: alle</option>
+            <option value="gruen">🟢 {AMPEL_LABEL.gruen}</option>
+            <option value="gelb">🟡 {AMPEL_LABEL.gelb}</option>
+            <option value="rot">🔴 {AMPEL_LABEL.rot}</option>
+            <option value="grau">⚪ {AMPEL_LABEL.grau}</option>
+          </select>
+        ) : null}
         <select className="select" aria-label="Favoriten" value={wert.fav} onChange={(e) => set({ fav: e.target.value })}>
           <option value="alle">Favoriten: alle</option>
           {profiles.map((p) => <option key={p.id} value={p.id}>Favoriten {p.name.split(' ')[0]}{me !== null && me.id === p.id ? ' (ich)' : ''}</option>)}
@@ -115,13 +121,13 @@ export default function FilterBar({ objekte, wert, onChange, treffer, standard, 
         <div className="f-toggles" role="group" aria-label="Schnellfilter">
           <button type="button" className="f-toggle" aria-pressed={wert.ausgeschieden} title="Ausgeschiedene Inserate (vom Markt, nicht erhalten) anzeigen" onClick={() => set({ ausgeschieden: !wert.ausgeschieden })}>Ausgeschiedene</button>
           <button type="button" className="f-toggle" aria-pressed={wert.abgesagte} title="Von uns abgesagte Inserate und zusammengeführte Dubletten anzeigen" onClick={() => set({ abgesagte: !wert.abgesagte })}>Abgesagte &amp; Dubletten</button>
-          <button type="button" className="f-toggle" aria-pressed={wert.nurTragbar} title="Nur Inserate, die tragbar sind" onClick={() => set({ nurTragbar: !wert.nurTragbar })}>Nur tragbar</button>
+          {zeige('tragbar') ? <button type="button" className="f-toggle" aria-pressed={wert.nurTragbar} title="Nur Inserate, die tragbar sind" onClick={() => set({ nurTragbar: !wert.nurTragbar })}>Nur tragbar</button> : null}
           <button type="button" className="f-toggle" aria-pressed={wert.nurUneinig} title="Nur Inserate, bei denen eure Bewertungen auseinandergehen" onClick={() => set({ nurUneinig: !wert.nurUneinig })}>Nur uneinig</button>
         </div>
-        <label className="f-check small" title="Automatischer Score 0 bis 100: nur Inserate ab diesem Wert">
+        {zeige('score') ? <label className="f-check small" title="Automatischer Score 0 bis 100: nur Inserate ab diesem Wert">
           Score ab
           <input className="input" type="number" inputMode="numeric" min={0} max={100} step={5} placeholder="0" value={wert.scoreMin !== null ? wert.scoreMin : ''} onChange={(e) => set({ scoreMin: e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) })} style={{ width: 70, minHeight: 36 }} />
-        </label>
+        </label> : null}
         <label className="f-check small" title="ÖV-Pendelzeit zu meinem Arbeitsort">
           🚆 max.
           <input className="input" type="number" inputMode="numeric" min={5} max={180} step={5} placeholder="Min" value={wert.pendelMax !== null ? wert.pendelMax : ''} onChange={(e) => set({ pendelMax: e.target.value === '' ? null : Number(e.target.value) })} style={{ width: 76, minHeight: 36 }} />
