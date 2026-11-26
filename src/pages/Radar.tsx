@@ -9,9 +9,12 @@ import { chf, dateLong, dateShort } from '../lib/format';
 import TeilenButton from '../components/TeilenButton';
 import { ScoreBadge } from '../components/ScoreInfo';
 import { StarsInput, StarsText } from '../components/Stars';
-import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, NeubauBewertung, NeubauEreignis, NeubauPhase, Neubauprojekt, Profile, RadarGemeinde } from '../lib/types';
+import type { Baugesuch, BaugesuchEinstufung, BaugesuchKategorie, BaugesuchStatus, BauherrTyp, BaugesuchVermarktung, DomainFund, NeubauBewertung, NeubauEreignis, NeubauPhase, Neubauprojekt, Profile, RadarGemeinde } from '../lib/types';
 
-type Tab = 'projekte' | 'karte' | 'baugesuche' | 'gemeinden';
+type Tab = 'projekte' | 'karte' | 'baugesuche' | 'domains' | 'gemeinden';
+
+const MONATE = ['Jan.', 'Feb.', 'März', 'April', 'Mai', 'Juni', 'Juli', 'Aug.', 'Sept.', 'Okt.', 'Nov.', 'Dez.'];
+const monatJahr = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return MONATE[d.getMonth()] + ' ' + d.getFullYear(); };
 type ProjektFilter = 'alle' | 'gemerkt' | 'kontakt';
 type KartenPhase = 'aktiv' | 'geplant' | 'vermarktung';
 type EinFilter = 'relevant' | 'fokus' | 'pruefen' | 'ausgeblendet';
@@ -271,6 +274,11 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
             {p.interessent_seit ? <span className="chip green" title="Wir stehen auf der Interessentenliste">Vorgemerkt seit {dateShort(p.interessent_seit)}</span> : null}
             {p.preis_ab !== null ? <span className={imBudget ? 'chip green' : 'chip warm'}>{imBudget ? 'im Budget' : 'über Budget'}</span> : null}
             {kontaktSinnvoll(p) && !schonKontaktiert(p) ? <span className="chip warm" title={p.kontakt_grund || undefined}>Kontakt sinnvoll</span> : null}
+            {p.phase === 'geplant' && (p.vermarktung_prognose || p.pruefrhythmus) ? (
+              <span className={p.pruefrhythmus === 'taeglich' ? 'chip accent' : 'chip outline'} title={'Neubau-Frühwarnung: erwarteter Vermarktungsstart = Baugesuch + 2 Monate' + (p.fruehwarnung_geprueft_am ? ', zuletzt geprüft ' + dateShort(p.fruehwarnung_geprueft_am) : '')}>
+                {p.vermarktung_prognose ? (p.vermarktung_prognose <= new Date().toISOString().slice(0, 10) ? 'Vermarktung fällig seit ' : 'Vermarktung ab ca. ') + monatJahr(p.vermarktung_prognose) : 'Frühwarnung'}{p.pruefrhythmus === 'taeglich' ? ' · täglich geprüft' : p.pruefrhythmus === 'woechentlich' ? ' · wöchentlich' : ''}
+              </span>
+            ) : null}
             {ueberwacht ? (
               <span className="chip outline" title={'Gebäude- und Wohnungsregister' + (p.gwr_geprueft_am ? ', geprüft ' + dateShort(p.gwr_geprueft_am) : ', noch nicht geprüft') + (p.gwr_status_seit ? ', Status seit ' + dateShort(p.gwr_status_seit) : '')}>
                 GWR: {p.gwr_status !== undefined && p.gwr_status !== null ? (GWR_TEXT[p.gwr_status] || p.gwr_status) : p.gwr_geprueft_am ? 'noch nicht erfasst' : 'offen'}
@@ -297,6 +305,8 @@ function ProjektKarte({ p, gesuche, ereignisse, inserate, leser, hervorgehoben, 
         {p.vermarkter ? <div><dt>Vermarkter</dt><dd>{p.vermarkter}</dd></div> : null}
         {p.kontakt ? <div><dt>Kontakt</dt><dd>{p.kontakt}</dd></div> : null}
         {p.bauherr ? <div><dt>Bauherr</dt><dd>{p.bauherr}</dd></div> : null}
+        {p.bauherr_projekte_url ? <div><dt>Projektseite</dt><dd><a href={p.bauherr_projekte_url} target="_blank" rel="noreferrer">{p.bauherr_projekte_url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)}</a></dd></div> : null}
+        {p.mail_entwurf_am ? <div><dt>Mail-Entwurf</dt><dd>in Gmail seit {dateShort(p.mail_entwurf_am)}</dd></div> : null}
       </dl>
       {p.notiz ? <p className="small" style={{ color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>{p.notiz}</p> : null}
       {inserate.length > 0 ? (
@@ -350,7 +360,7 @@ export default function Radar() {
     if (geteiltProjekt !== null) { return 'projekte'; }
     if (geteiltGesuch !== null) { return 'baugesuche'; }
     if (params.get('filter') === 'kontakt') { return 'projekte'; }
-    try { const t = localStorage.getItem('radar-tab'); return t === 'baugesuche' || t === 'gemeinden' || t === 'karte' ? t : 'projekte'; } catch { return 'projekte'; }
+    try { const t = localStorage.getItem('radar-tab'); return t === 'baugesuche' || t === 'gemeinden' || t === 'karte' || t === 'domains' ? t : 'projekte'; } catch { return 'projekte'; }
   });
   // Filter für Projekte und Karte: alle, nur von mir gemerkte, nur «Kontakt sinnvoll»; Suche auch in der Kurznotiz
   const [projFilter, setProjFilter] = useState<ProjektFilter>(() => (params.get('filter') === 'kontakt' ? 'kontakt' : 'alle'));
@@ -362,6 +372,8 @@ export default function Radar() {
   const [gemeinden, setGemeinden] = useState<RadarGemeinde[]>([]);
   const [inserate, setInserate] = useState<ProjektInserat[]>([]);
   const [bewertungen, setBewertungen] = useState<NeubauBewertung[]>([]);
+  const [domains, setDomains] = useState<DomainFund[]>([]);
+  const [domainAlle, setDomainAlle] = useState(false);
   const [laden, setLaden] = useState(true);
   const [ein, setEin] = useState<EinFilter>('relevant');
   const [kat, setKat] = useState<string>('');
@@ -384,14 +396,16 @@ export default function Radar() {
   }, [params]);
 
   async function laden_() {
-    const [p, g, e, gm, o, bw] = await Promise.all([
+    const [p, g, e, gm, o, bw, dm] = await Promise.all([
       supabase.from('neubauprojekte').select('*').order('aktualisiert_am', { ascending: false }),
       supabase.from('baugesuche').select('*').order('publiziert_am', { ascending: false }).limit(3000),
       supabase.from('neubau_ereignisse').select('*').order('datum', { ascending: false }).limit(2000),
       supabase.from('radar_gemeinden').select('*').order('kanton').order('name'),
       supabase.from('objekte').select('id, zimmer, flaeche_m2, preis_chf, markt_status, neubauprojekt_id').not('neubauprojekt_id', 'is', null).is('zusammengefuehrt_in', null).order('preis_chf'),
       supabase.from('neubau_bewertungen').select('*'),
+      supabase.from('domain_funde').select('*').order('erstmals_gesehen', { ascending: false }).limit(300),
     ]);
+    if (dm.data) { setDomains(dm.data as DomainFund[]); }
     if (bw.data) { setBewertungen(bw.data as NeubauBewertung[]); }
     if (o.data) { setInserate(o.data as ProjektInserat[]); }
     if (p.data) { setProjekte(p.data as Neubauprojekt[]); }
@@ -534,6 +548,16 @@ export default function Radar() {
     setModal(null);
     laden_();
   }
+  async function gemeindeFruehwarnung(g: RadarGemeinde, an: boolean) {
+    setGemeinden((xs) => xs.map((x) => (x.name === g.name ? { ...x, fruehwarnung: an } : x)));
+    const { error } = await supabase.from('radar_gemeinden').update({ fruehwarnung: an, updated_at: new Date().toISOString() }).eq('name', g.name);
+    if (error) { setMeldung(error.message); laden_(); }
+  }
+  async function domainStatus(d: DomainFund, status: DomainFund['status']) {
+    setDomains((xs) => xs.map((x) => (x.id === d.id ? { ...x, status, geprueft_am: new Date().toISOString() } : x)));
+    const { error } = await supabase.from('domain_funde').update({ status, geprueft_am: new Date().toISOString() }).eq('id', d.id);
+    if (error) { setMeldung(error.message); laden_(); }
+  }
   async function gemeindeAktiv(g: RadarGemeinde, aktiv: boolean) {
     setGemeinden((xs) => xs.map((x) => (x.name === g.name ? { ...x, aktiv } : x)));
     const { error } = await supabase.from('radar_gemeinden').update({ aktiv, updated_at: new Date().toISOString() }).eq('name', g.name);
@@ -637,6 +661,7 @@ export default function Radar() {
         <button type="button" role="tab" aria-pressed={tab === 'projekte'} aria-selected={tab === 'projekte'} onClick={() => setTab('projekte')}>Projekte <span className="tnum muted">{anzahlAktiv}</span>{kpiKontakt > 0 ? <span className="chip warm" style={{ marginLeft: 6 }} title="Kontakt sinnvoll">{kpiKontakt}</span> : null}</button>
         <button type="button" role="tab" aria-pressed={tab === 'karte'} aria-selected={tab === 'karte'} onClick={() => setTab('karte')}>Karte</button>
         <button type="button" role="tab" aria-pressed={tab === 'baugesuche'} aria-selected={tab === 'baugesuche'} onClick={() => setTab('baugesuche')}>Baugesuche{kpiNeu > 0 ? <span className="chip warm" style={{ marginLeft: 6 }}>{kpiNeu}</span> : null}</button>
+        <button type="button" role="tab" aria-pressed={tab === 'domains'} aria-selected={tab === 'domains'} onClick={() => setTab('domains')}>Domains{domains.filter((d) => d.status === 'neu').length > 0 ? <span className="chip warm" style={{ marginLeft: 6 }}>{domains.filter((d) => d.status === 'neu').length}</span> : null}</button>
         <button type="button" role="tab" aria-pressed={tab === 'gemeinden'} aria-selected={tab === 'gemeinden'} onClick={() => setTab('gemeinden')}>Gemeinden</button>
       </div>
 
@@ -809,6 +834,37 @@ export default function Radar() {
         </section>
       ) : null}
 
+      {!laden && tab === 'domains' ? (
+        <section className="card pad">
+          <h2>Domain-Radar</h2>
+          <p className="small muted" style={{ marginTop: 4 }}>Neue .ch-Domains mit einem Ortsnamen der Frühwarnungs-Gemeinden, aus den öffentlichen Zertifikatslogs (täglich). Projekt-Websites wie ursinia-uster.ch tauchen hier auf, sobald sie ein Zertifikat haben, oft Wochen vor dem ersten Inserat. Der tägliche Frühwarnungs-Lauf öffnet jede neue Domain und ordnet sie zu.</p>
+          <label className="small" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', margin: '10px 0' }}>
+            <input type="checkbox" checked={domainAlle} onChange={(e) => setDomainAlle(e.target.checked)} /> auch irrelevante zeigen
+          </label>
+          <div className="radar-domains">
+            {domains.filter((d) => domainAlle || d.status !== 'irrelevant').map((d) => {
+              const proj = d.neubauprojekt_id ? projekte.find((x) => x.id === d.neubauprojekt_id) : undefined;
+              return (
+                <div key={d.id} className="radar-domain" style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap', padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+                  <span className={d.status === 'neubau' ? 'chip green' : d.status === 'neu' ? 'chip warm' : 'chip outline'}>{d.status === 'neubau' ? 'Neubau' : d.status === 'neu' ? 'neu' : 'irrelevant'}</span>
+                  <a href={'https://' + d.domain} target="_blank" rel="noreferrer"><strong>{d.domain}</strong></a>
+                  <span className="small muted">{[d.gemeinde, d.zertifikat_ab ? 'Zertifikat ' + dateShort(d.zertifikat_ab) : null, 'gefunden ' + dateShort(d.erstmals_gesehen)].filter(Boolean).join(' · ')}</span>
+                  {proj ? <a className="small" href={'/radar?projekt=' + proj.id}>{proj.name}</a> : null}
+                  {d.notiz ? <span className="small" style={{ flexBasis: '100%', color: 'var(--ink-2)' }}>{d.notiz}</span> : null}
+                  {!leser && d.status === 'neu' ? (
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                      <button type="button" className="btn sm" onClick={() => domainStatus(d, 'neubau')}>Neubau</button>
+                      <button type="button" className="btn sm" onClick={() => domainStatus(d, 'irrelevant')}>Irrelevant</button>
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+            {domains.filter((d) => domainAlle || d.status !== 'irrelevant').length === 0 ? <div className="empty">Noch keine Domains gefunden.</div> : null}
+          </div>
+        </section>
+      ) : null}
+
       {!laden && tab === 'gemeinden' ? (
         <section className="card pad">
           <h2>Gemeinden im Radar</h2>
@@ -821,6 +877,7 @@ export default function Radar() {
                   <label key={g.name} className="radar-gemeinde">
                     <input type="checkbox" checked={g.aktiv} disabled={leser} onChange={(e) => gemeindeAktiv(g, e.target.checked)} />
                     <span>{g.name}</span>
+                    <button type="button" className={g.fruehwarnung ? 'chip accent' : 'chip outline'} disabled={leser} title="Neubau-Frühwarnung: geplante Mehrfamilienbauten dieser Gemeinde täglich nach Website, Vermarkter und Bauherren-Projektseite durchsuchen" onClick={(e) => { e.preventDefault(); gemeindeFruehwarnung(g, !g.fruehwarnung); }}>{g.fruehwarnung ? 'täglich' : 'wöchentlich'}</button>
                     <span className="xs muted">{g.hinweis || ''}</span>
                     <span className="xs muted tnum">{gesuche.filter((b) => b.gemeinde === g.name && istRelevant(b)).length || ''}</span>
                   </label>
@@ -836,7 +893,7 @@ export default function Radar() {
               <button type="button" className="btn" onClick={gemeindeNeu}>Hinzufügen</button>
             </div>
           ) : null}
-          <p className="xs muted" style={{ marginTop: 14 }}>Zahl rechts: relevante Baugesuche (Fokus und Prüfen) der letzten 12 Monate. Neue Gemeinden werden ab dem nächsten täglichen Abruf berücksichtigt (rückwirkend 3 Tage).</p>
+          <p className="xs muted" style={{ marginTop: 14 }}>«täglich» = Neubau-Frühwarnung: geplante Mehrfamilienbauten werden ab dem Baugesuch täglich gesucht (Bauherren-Projektseiten, Websuche, Domain-Radar). Zahl rechts: relevante Baugesuche (Fokus und Prüfen) der letzten 12 Monate. Neue Gemeinden werden ab dem nächsten täglichen Abruf berücksichtigt (rückwirkend 3 Tage).</p>
         </section>
       ) : null}
 

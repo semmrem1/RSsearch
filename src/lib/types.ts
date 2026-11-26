@@ -341,8 +341,19 @@ export interface Neubauprojekt {
   kurznotiz?: string | null;
   kurznotiz_von?: string | null;
   kurznotiz_am?: string | null;
+  /** Neubau-Frühwarnung, siehe Migration 20261126_neubau_fruehwarnung.sql */
+  vermarktung_prognose?: string | null;
+  pruefrhythmus?: 'taeglich' | 'woechentlich' | null;
+  bauherr_projekte_url?: string | null;
+  fruehwarnung_geprueft_am?: string | null;
+  mail_entwurf_am?: string | null;
 }
 /** Sterne und Merken pro Person auf einem Neubauprojekt (0 = keine Bewertung, gemerkt false = nicht gemerkt) */
 export interface NeubauBewertung { neubauprojekt_id: string; user_id: string; sterne: number; aktualisiert_am: string; gemerkt?: boolean; gemerkt_am?: string | null }
 export interface NeubauEreignis { id: number; neubauprojekt_id: string; datum: string; typ: string; alt: string | null; neu: string | null; user_id: string | null }
-export interface RadarGemeinde { name: string; kanton: string; bfs_nr: number | null; aktiv: boolean; hinweis: string | null }
+export interface RadarGemeinde { name: string; kanton: string; bfs_nr: number | null; aktiv: boolean; hinweis: string | null; fruehwarnung?: boolean; domain_stichworte?: string[] | null }
+/** Domain-Radar: neue .ch-Domain mit Ortsnamen aus den Zertifikatslogs */
+export interface DomainFund {
+  id: string; domain: string; stichwort: string | null; gemeinde: string | null; zertifikat_ab: string | null; erstmals_gesehen: string;
+  quelle: string; status: 'neu' | 'neubau' | 'irrelevant'; neubauprojekt_id: string | null; notiz: string | null; geprueft_am: string | null;
+}

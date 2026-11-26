@@ -203,15 +203,28 @@ async function amtsblatt(kanton: 'ZH' | 'SZ', seit: string, bis: string | null, 
 // ---------- Publikationen SG ----------
 async function stGallen(gemeinden: Gemeinde[], seit: string, info: string[]): Promise<Zeile[]> {
   const out: Zeile[] = []; let gelesen = 0; let fehler = 0;
+  const gesehen = new Set<string>();
   for (const g of gemeinden.filter((x) => x.kanton === 'SG')) {
     const suche = g.name.replace(/\s+SG$/, '');
-    const u = SG + '/amtliche-publikationen/?searchQuery=' + encodeURIComponent(suche) + '&timerange%5Btype%5D=4&filter%5Bcategory%5D%5B%5D=172%2C180&sortorder=1';
-    let html = '';
-    try { const r = await holen(u, 30000); if (!r.ok) { fehler++; continue; } html = await r.text(); } catch (_e) { fehler++; continue; }
-    const teile = html.split('publication-list__item--publication').slice(1);
+    // Bauanzeigen der Gemeinden stehen unter «Gemeindepublikationen / Zur Einsprache offen» (53,169),
+    // kantonale unter «Kantonales Amtsblatt / Zur Einsprache offen» (172,180). 10 Treffer pro Seite, neueste zuerst.
+    const teile: string[] = [];
+    for (const kat of ['53%2C169', '172%2C180']) {
+      for (let seite = 0; seite < 4; seite++) {
+        const u = SG + '/amtliche-publikationen/?searchQuery=' + encodeURIComponent(suche) + '&timerange%5Btype%5D=4&filter%5Bcategory%5D%5B%5D=' + kat + '&sortorder=1' + (seite > 0 ? '&page=' + seite : '');
+        let html = '';
+        try { const r = await holen(u, 30000); if (!r.ok) { fehler++; break; } html = await r.text(); } catch (_e) { fehler++; break; }
+        const neu = html.split('publication-list__item--publication').slice(1);
+        teile.push(...neu);
+        // Weiterblättern nur, solange die Seite voll ist und noch Publikationen ab «seit» enthält
+        const daten = neu.map((t) => chDatum(text(t.slice(0, 1500))) || '').filter((d) => d !== '');
+        if (neu.length < 10 || daten.length === 0 || daten.every((d) => d < seit)) { break; }
+      }
+    }
     for (const t of teile) {
       const link = t.match(/href="(?:https:\/\/publikationen\.sg\.ch)?(\/ekab\/([\d.]+)\/publikation\/)"/);
-      if (!link) { continue; }
+      if (!link || gesehen.has(link[2])) { continue; }
+      gesehen.add(link[2]);
       const kurz = text(t.slice(0, 4000));
       const stelle = (kurz.match(/Stelle:\s*(.*?)\s+Rubrik:/) || [])[1] || '';
       const gemeinde = zuordnung([g])(null, stelle);
