@@ -1,14 +1,14 @@
 // Edge Function: Domain-Radar der Neubau-Frühwarnung.
-// Sucht in den öffentlichen Zertifikatslogs (Certificate Transparency, via crt.sh) nach neuen .ch-Domains,
-// deren Name einen Ortsnamen der Wunsch-Gemeinden enthält (radar_gemeinden.domain_stichworte, fruehwarnung = true),
-// z.B. ursinia-uster.ch. Neue Funde landen in public.domain_funde (status 'neu'); der tägliche Frühwarnungs-Lauf
+// Sucht in den öffentlichen Zertifikatslogs (Certificate Transparency, öffentliche Postgres-Schnittstelle von crt.sh,
+// guest@crt.sh:5432/certwatch, Index auf dem umgekehrten Namen) nach neuen .ch-Domains, die auf einen Ortsnamen enden
+// (z.B. ursinia-uster.ch, wohnen-in-meilen.ch; der Volltextindex findet nur Firmenzertifikate wie «Spital Uster»),
+// Stichworte aus radar_gemeinden.domain_stichworte (fruehwarnung = true). Neue Funde landen in public.domain_funde (status 'neu'); der tägliche Frühwarnungs-Lauf
 // öffnet sie und entscheidet, ob es eine Neubau-Website ist.
-// Body: { tage?: number (Standard 3, nur Zertifikate der letzten n Tage), trocken?: boolean (nichts schreiben) }
+// Body: { tage?: number (Standard 3, nur Zertifikate der letzten n Tage), trocken?: boolean (nichts schreiben),
+//         stichworte?: string[] (nur diese Stichworte, für Tests) }
 // Aufruf aus SQL: select public.domain_radar_abrufen();  (täglich per pg_cron, Migration 20261126_neubau_fruehwarnung.sql)
 import { admin, berechtigt, cors, json, leseBody } from './auth.ts';
-
-const CRT = 'https://crt.sh/';
-const HDR = { 'User-Agent': 'PRimmo/1.0 (privater Neubau-Radar, 1 Abruf pro Tag)', Accept: 'application/json' };
+import postgres from 'npm:postgres@3.4.4';
 
 // Offizielle Gemeinde-Domains und bekannte Seiten, die nie ein Neubauprojekt sind
 const IGNORIEREN = new Set([
@@ -19,14 +19,7 @@ const IGNORIEREN = new Set([
 const FALSCH = /(cluster|buster|booster|rooster|holster|bolster|lobster|mobster|toaster|coaster|roaster|poster|jonas|jonathan)/;
 
 interface Gemeinde { name: string; domain_stichworte: string[] | null }
-interface CrtZeile { name_value: string; not_before: string; entry_timestamp: string | null }
 interface Fund { domain: string; stichwort: string; gemeinde: string; ab: string }
-
-async function holen(url: string, ms: number): Promise<Response> {
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
-  try { return await fetch(url, { headers: HDR, signal: c.signal }); } finally { clearTimeout(t); }
-}
 
 // Registrierbare .ch-Domain (zweite Ebene), sonst null
 function registrierbar(name: string): string | null {
@@ -45,12 +38,6 @@ function passt(domain: string, kw: string): boolean {
   return woerter.some((w) => w === kw || w.startsWith(kw) || (w.endsWith(kw) && w.length >= kw.length + 3));
 }
 
-function muster(kw: string): string[] {
-  const m = [kw + '-%.ch', '%-' + kw + '.ch', kw + '%.ch'];
-  if (kw.length >= 6) { m.push('%' + kw + '.ch'); }
-  return m;
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') { return new Response('ok', { headers: cors }); }
   const a = admin();
@@ -59,7 +46,6 @@ Deno.serve(async (req) => {
   const body = await leseBody(req);
   const tage = typeof body.tage === 'number' ? body.tage : typeof body.tage === 'string' && /^\d+$/.test(body.tage) ? Number(body.tage) : 3;
   const trocken = body.trocken === true || body.trocken === 'true';
-  const grenze = Date.now() - Math.max(1, Math.min(tage, 60)) * 86400000;
   const start = new Date().toISOString();
 
   const { data: gem, error: ge } = await a.from('radar_gemeinden').select('name, domain_stichworte').eq('aktiv', true).eq('fruehwarnung', true);
@@ -76,40 +62,63 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (Array.isArray(body.stichworte)) {
+    const nur = new Set((body.stichworte as unknown[]).map((x) => String(x).toLowerCase().trim()));
+    for (const k of [...stich.keys()]) { if (!nur.has(k)) { stich.delete(k); } }
+  }
+
   const funde = new Map<string, Fund>();
   const info: string[] = [];
-  let abfragen = 0; let fehler = 0;
-  const auftraege: { kw: string; q: string }[] = [];
-  for (const kw of stich.keys()) { for (const q of muster(kw)) { auftraege.push({ kw, q }); } }
+  let abfragen = 0; let fehler = 0; const fehlerArt = new Map<string, number>();
+  const kws = [...stich.keys()];
 
-  // Höchstens 3 Abfragen gleichzeitig, Gesamtzeit begrenzt (Edge Function max. 150 s)
-  const ende = Date.now() + 120000;
-  let i = 0;
-  async function arbeiter() {
-    while (i < auftraege.length && Date.now() < ende) {
-      const { kw, q } = auftraege[i++];
+  // Ein Stichwort pro Abfrage, nacheinander (crt.sh erlaubt Gäste nur wenige Verbindungen), Gesamtzeit begrenzt
+  // (pg_net wartet 120 s, Edge Function max. 150 s). Die HTTP-Suche von crt.sh taugt nicht: «%» am Anfang ist
+  // nicht erlaubt, Teilwort-Muster laufen in Timeouts, ohne «%» findet sie nur exakte Namen.
+  const ende = Date.now() + 85000;
+  let erledigt = 0;
+  let sql: ReturnType<typeof postgres> | null = null;
+  try {
+    sql = postgres({ host: 'crt.sh', port: 5432, database: 'certwatch', username: 'guest', ssl: false, max: 1, prepare: false, connect_timeout: 15, idle_timeout: 5 });
+    for (const kw of kws) {
+      if (ende - Date.now() < 8000) { break; }
+      abfragen++;
       try {
-        const r = await holen(CRT + '?q=' + encodeURIComponent(q) + '&output=json&exclude=expired', 30000);
-        abfragen++;
-        if (!r.ok) { fehler++; continue; }
-        const zeilen = (await r.json()) as CrtZeile[];
+        // crt.sh nutzt Statement-Pooling: keine Transaktionen und kein SET, deshalb Zeitlimit auf Client-Seite
+        const ms = Math.max(5000, Math.min(25000, ende - Date.now() - 2000));
+        const abfrage = sql.unsafe(
+          "select distinct lower(cai.name_value) as name, x509_notbefore(cai.certificate) as nb " +
+          "from certificate_and_identities cai " +
+          "where reverse(lower(cai.name_value)) like reverse('%' || $1 || '.ch') " +
+          "and x509_notbefore(cai.certificate) >= now() - ($2 || ' days')::interval " +
+          "limit 3000", [kw, String(Math.max(1, Math.min(tage, 400)))]);
+        let uhr: number | undefined;
+        const zeitlimit = new Promise<never>((_, nein) => { uhr = setTimeout(() => nein(new Error('Timeout ' + Math.round(ms / 1000) + ' s')), ms); });
+        let zeilen: { name: string; nb: Date | string }[];
+        try { zeilen = (await Promise.race([abfrage, zeitlimit])) as unknown as { name: string; nb: Date | string }[]; }
+        finally { clearTimeout(uhr); }
+        erledigt++;
         for (const z of zeilen) {
-          const zeit = Date.parse((z.entry_timestamp || z.not_before) + 'Z');
-          if (!(zeit >= grenze)) { continue; }
-          for (const name of (z.name_value || '').split('\n')) {
-            const d = registrierbar(name);
-            if (d === null || IGNORIEREN.has(d) || !passt(d, kw)) { continue; }
-            const alt = funde.get(d);
-            const ab = new Date(Date.parse(z.not_before + 'Z')).toISOString();
-            if (alt === undefined || ab < alt.ab) { funde.set(d, { domain: d, stichwort: kw, gemeinde: (stich.get(kw) || []).join(' / '), ab }); }
-          }
+          const d = registrierbar(z.name);
+          if (d === null || IGNORIEREN.has(d) || !passt(d, kw)) { continue; }
+          const ab = new Date(z.nb).toISOString();
+          const alt = funde.get(d);
+          if (alt === undefined || ab < alt.ab) { funde.set(d, { domain: d, stichwort: kw, gemeinde: (stich.get(kw) || []).join(' / '), ab }); }
         }
-      } catch (_e) { fehler++; }
+      } catch (e) {
+        fehler++;
+        const k = e instanceof Error ? e.message.slice(0, 80) : 'Fehler';
+        fehlerArt.set(k, (fehlerArt.get(k) || 0) + 1);
+      }
     }
+  } catch (e) {
+    fehler++; abfragen = Math.max(abfragen, 1);
+    fehlerArt.set('Verbindung: ' + (e instanceof Error ? e.message.slice(0, 80) : 'Fehler'), 1);
+  } finally {
+    if (sql !== null) { try { await sql.end({ timeout: 2 }); } catch (_e) { /* egal */ } }
   }
-  await Promise.all([arbeiter(), arbeiter(), arbeiter()]);
-  const unvollstaendig = i < auftraege.length;
-  info.push(abfragen + ' von ' + auftraege.length + ' Abfragen' + (fehler > 0 ? ', ' + fehler + ' Fehler' : '') + (unvollstaendig ? ', Zeitlimit erreicht' : ''));
+  const unvollstaendig = erledigt + fehler < kws.length;
+  info.push(erledigt + ' von ' + kws.length + ' Stichworten abgefragt' + (fehler > 0 ? ', ' + fehler + ' Fehler (' + [...fehlerArt.entries()].map(([k, n]) => k + ': ' + n).join(', ') + ')' : '') + (unvollstaendig ? ', Zeitlimit erreicht' : ''));
 
   // Schon bekannte Domains nicht erneut melden
   const liste = [...funde.values()];
@@ -127,7 +136,7 @@ Deno.serve(async (req) => {
   if (!trocken) {
     await a.from('lauf_protokoll').insert({
       makler: 'Domain-Radar', gestartet_am: start, geprueft: !ganzFehler, anzahl_inserate: liste.length, neue: neu.length, geaendert: 0,
-      fehler: ganzFehler ? 'crt.sh nicht erreichbar (' + fehler + ' Fehler)' : unvollstaendig ? 'Zeitlimit: ' + info[0] : null, beendet_am: new Date().toISOString(),
+      fehler: ganzFehler ? 'crt.sh nicht erreichbar: ' + info[0] : unvollstaendig ? 'Zeitlimit: ' + info[0] : null, beendet_am: new Date().toISOString(),
     });
   }
   return json({ ok: !ganzFehler, tage, gefunden: liste.length, neu: neu.map((f) => f.domain), info });

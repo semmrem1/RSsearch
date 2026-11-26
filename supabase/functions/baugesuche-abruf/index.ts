@@ -207,11 +207,14 @@ async function stGallen(gemeinden: Gemeinde[], seit: string, info: string[]): Pr
   for (const g of gemeinden.filter((x) => x.kanton === 'SG')) {
     const suche = g.name.replace(/\s+SG$/, '');
     // Bauanzeigen der Gemeinden stehen unter «Gemeindepublikationen / Zur Einsprache offen» (53,169),
-    // kantonale unter «Kantonales Amtsblatt / Zur Einsprache offen» (172,180). 10 Treffer pro Seite, neueste zuerst.
+    // kantonale unter «Kantonales Amtsblatt / Zur Einsprache offen» (172,180). Die Trefferliste lädt die Seite per AJAX
+    // (type=80, Seite ab 1, 10 Treffer pro Seite, neueste zuerst); die normale Seite enthält keine Treffer.
     const teile: string[] = [];
     for (const kat of ['53%2C169', '172%2C180']) {
-      for (let seite = 0; seite < 4; seite++) {
-        const u = SG + '/amtliche-publikationen/?searchQuery=' + encodeURIComponent(suche) + '&timerange%5Btype%5D=4&filter%5Bcategory%5D%5B%5D=' + kat + '&sortorder=1' + (seite > 0 ? '&page=' + seite : '');
+      for (let seite = 1; seite <= 8; seite++) {
+        const u = SG + '/amtliche-publikationen?filter%5Bcategory%5D%5B0%5D=' + kat + '&filter%5Btype%5D%5B0%5D=tx_ekab_publication_domain_model_publication&page=' + seite
+          + '&searchQuery=' + encodeURIComponent(suche) + '&sortorder=1&timerange%5Btype%5D=4'
+          + '&tx_diamcore_publicationsearchresult%5Baction%5D=resultAjax&tx_diamcore_publicationsearchresult%5Bcontroller%5D=PublicationSearch&type=80';
         let html = '';
         try { const r = await holen(u, 30000); if (!r.ok) { fehler++; break; } html = await r.text(); } catch (_e) { fehler++; break; }
         const neu = html.split('publication-list__item--publication').slice(1);
