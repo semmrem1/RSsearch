@@ -39,7 +39,16 @@ function esc(s: string): string {
 
 const PHASE_NAME: Record<string, string> = { geplant: 'Geplant', vormerkung: 'Vormerkung', verkauf: 'Im Verkauf', ausverkauft: 'Ausverkauft', miete: 'Nur Miete', uninteressant: 'Uninteressant' };
 
-export function zuRadarPunkt(p: Neubauprojekt, gesuche: Baugesuch[], bewertungen: NeubauBewertung[], profiles: Profile[]): KartenPunkt | null {
+/** Pin-Text für Neubauprojekte im Verkauf: Preis ab in Mio., sonst «Neubau» */
+function neubauLabel(p: Neubauprojekt): string {
+  return p.preis_ab !== null ? 'ab ' + (p.preis_ab / 1000000).toFixed(2) + ' M' : 'Neubau';
+}
+
+/**
+ * navPfad: true auf der Inserate-Karte, dort führen die Links im Popup als Pfad ins Radar («/radar?projekt=…»),
+ * im Radar selbst genügt die Projekt-ID.
+ */
+export function zuRadarPunkt(p: Neubauprojekt, gesuche: Baugesuch[], bewertungen: NeubauBewertung[], profiles: Profile[], optionen?: { navPfad?: boolean }): KartenPunkt | null {
   if (p.lat === undefined || p.lat === null || p.lng === undefined || p.lng === null) { return null; }
   const genau = p.geo_genauigkeit === 'gwr' || p.geo_genauigkeit === 'adresse' || p.geo_genauigkeit === 'manuell';
   const [lat, lng] = genau ? [p.lat, p.lng] : versatz(p.id, p.lat, p.lng);
@@ -47,10 +56,12 @@ export function zuRadarPunkt(p: Neubauprojekt, gesuche: Baugesuch[], bewertungen
   const kontakt = kontaktSinnvoll(p);
   const einheiten = p.einheiten !== null ? p.einheiten : (p.gwr_wohnungen !== undefined ? p.gwr_wohnungen : null);
   const g = gesuche.find((x) => x.neubauprojekt_id === p.id);
+  const neubau = p.phase === 'verkauf';
+  const nav = optionen !== undefined && optionen.navPfad === true ? '/radar?projekt=' + p.id : p.id;
 
   const label = [
     gemerkt.length > 0 ? '★' : null,
-    kontakt ? 'Kontakt' : p.phase === 'geplant' ? (einheiten !== null ? einheiten + ' Whg' : 'MFH') : PHASE_NAME[p.phase],
+    kontakt ? 'Kontakt' : p.phase === 'geplant' ? (einheiten !== null ? einheiten + ' Whg' : 'MFH') : neubau ? neubauLabel(p) : PHASE_NAME[p.phase],
   ].filter(Boolean).join(' ');
 
   const status = [
@@ -63,17 +74,19 @@ export function zuRadarPunkt(p: Neubauprojekt, gesuche: Baugesuch[], bewertungen
 
   const html =
     '<div class="pp-body">' +
-    '<a class="pp-title" href="/radar?projekt=' + p.id + '" data-nav="' + p.id + '">' + esc(p.name) + '</a>' +
+    '<a class="pp-title" href="/radar?projekt=' + p.id + '" data-nav="' + esc(nav) + '">' + esc(p.name) + '</a>' +
     '<div class="pp-facts">' + esc([p.gemeinde, p.adresse !== null && !p.name.includes(p.adresse) ? p.adresse : null].filter(Boolean).join(' · ')) + '</div>' +
     (p.kurznotiz ? '<div class="pp-notiz">«' + esc(p.kurznotiz) + '»</div>' : '') +
+    (neubau && p.vermarkter ? '<div class="pp-facts">Vermarkter: ' + esc(p.vermarkter) + '</div>' : '') +
+    (neubau && p.bezug ? '<div class="pp-facts">Bezug: ' + esc(p.bezug) + '</div>' : '') +
     '<div class="pp-stage">' + esc(status) + (genau ? '' : ' · Lage nur auf Ortsebene') + '</div>' +
     (kontakt ? '<div class="pp-kontakt">Kontakt sinnvoll seit ' + esc(dateShort(p.kontakt_sinnvoll_seit)) + ': ' + esc(p.kontakt_grund || '') + (schonKontaktiert(p) ? ' (kontaktiert)' : '') + '</div>' : '') +
     (g !== undefined && g.beschreibung ? '<div class="pp-facts">' + esc(g.beschreibung.slice(0, 140)) + '</div>' : '') +
     (wer !== '' ? '<div class="pp-stage">Gemerkt: ' + esc(wer) + '</div>' : '') +
-    '<div class="pp-links"><a class="pp-detail" href="/radar?projekt=' + p.id + '" data-nav="' + p.id + '">Zum Projekt</a>' +
+    '<div class="pp-links"><a class="pp-detail" href="/radar?projekt=' + p.id + '" data-nav="' + esc(nav) + '">Zum Projekt</a>' +
     (p.website ? '<a class="pp-ext" href="' + esc(p.website) + '" target="_blank" rel="noopener noreferrer">Website ↗</a>' : '') +
     (g !== undefined && g.url ? '<a class="pp-ext" href="' + esc(g.url) + '" target="_blank" rel="noopener noreferrer">Baugesuch ↗</a>' : '') +
     '</div></div>';
 
-  return { id: p.id, lat, lng, genau, label, farbe: farbeProjekt(p), popupHtml: html };
+  return { id: p.id, lat, lng, genau, label, farbe: farbeProjekt(p), neubau, popupHtml: html };
 }

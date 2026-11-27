@@ -185,6 +185,12 @@ table.list a.obj { display: flex; flex-direction: column; gap: 2px; text-decorat
 .pin.fav.ungenau { background: #FFF4CC; color: #15181C; border: 2px dashed #8A6400; }
 .pin.fav.ungenau::after { border-top-color: #8A6400; }
 .leaflet-marker-icon:hover .pin, .leaflet-marker-icon:focus .pin { filter: brightness(1.15); }
+.pin.neubau, .pin.neubau.fav { --pin: #6D3FA6; background: #6D3FA6; color: #fff; border: 2px solid #fff; border-radius: 999px; padding: 4px 9px 4px 7px; font-size: 12.5px; box-shadow: 0 0 0 2px #6D3FA6, 0 2px 6px rgba(0,0,0,0.4); }
+.pin.neubau::before { content: '⌂'; font-size: 14px; line-height: 1; margin-right: 4px; vertical-align: -1px; }
+.pin.neubau::after, .pin.neubau.fav::after { border-top-color: #6D3FA6; bottom: -9px; }
+.pin.neubau.ungenau, .pin.neubau.fav.ungenau { background: #fff; color: #6D3FA6; border: 2px dashed #6D3FA6; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+.karte-legende i.neubau { background: #6D3FA6; border-radius: 999px; box-shadow: 0 0 0 2px #fff, 0 0 0 3px #6D3FA6; }
+
 .karte-legende { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 22px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line-soft); }
 .karte-legende span { display: inline-flex; align-items: center; gap: 6px; }
 .karte-legende i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }

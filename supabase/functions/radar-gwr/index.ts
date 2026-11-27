@@ -48,6 +48,11 @@ function lv95zuWgs(e: number, n: number): { lat: number; lng: number } {
   return { lat: lat * 100 / 36, lng: lng * 100 / 36 };
 }
 function inSchweiz(lat: number, lng: number): boolean { return lat > 45.7 && lat < 47.9 && lng > 5.9 && lng < 10.6; }
+const MAX_KM_ZUR_GEMEINDE = 8;
+function kmZwischen(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const dy = (a.lat - b.lat) * 111.2; const dx = (a.lng - b.lng) * 111.2 * Math.cos(((a.lat + b.lat) / 2) * Math.PI / 180);
+  return Math.sqrt(dx * dx + dy * dy);
+}
 async function holeJson(url: string): Promise<unknown> {
   for (let i = 0; i < 2; i++) {
     try {
@@ -134,13 +139,22 @@ async function pruefe(p: Projekt, ueberwacht: boolean): Promise<Ergebnis> {
       const w = lv95zuWgs(lage.e, lage.n);
       if (inSchweiz(w.lat, w.lng)) { erg.geo = { lat: w.lat, lng: w.lng, genauigkeit: 'gwr' }; }
     }
+    // Adresssuche nur übernehmen, wenn der Treffer in der Nähe der Gemeinde liegt (URSINIA Uster landete sonst in Bern)
+    const gemOrt = erg.geo === null && gemeinde !== '' ? await suche(gemeinde, 'gg25,gazetteer,zipcode') : null;
+    const nahe = (t: { lat: number; lng: number }) => gemOrt === null || kmZwischen(t, gemOrt) <= MAX_KM_ZUR_GEMEINDE;
     if (erg.geo === null && strasse !== '') {
-      const t = await suche((p.adresse || '') + ' ' + gemeinde.replace(/\s+(ZH|SZ|SG)$/, ''), 'address');
-      if (t !== null) { erg.geo = { ...t, genauigkeit: nummern.length > 0 ? 'adresse' : 'ort' }; }
+      const ort = gemeinde.replace(/\s+(ZH|SZ|SG)$/, '');
+      const texte = Array.from(new Set([
+        nummern.length > 0 ? strasse + ' ' + nummern[0] + ' ' + ort : null,
+        (p.adresse || '').split(',')[0] + ' ' + ort,
+      ].filter((x): x is string => x !== null)));
+      for (const text of texte) {
+        const t = await suche(text, 'address');
+        if (t !== null && nahe(t)) { erg.geo = { ...t, genauigkeit: nummern.length > 0 ? 'adresse' : 'ort' }; break; }
+      }
     }
-    if (erg.geo === null && gemeinde !== '') {
-      const t = await suche(gemeinde, 'gg25,gazetteer,zipcode');
-      if (t !== null) { erg.geo = { ...t, genauigkeit: 'ort' }; }
+    if (erg.geo === null && gemOrt !== null) {
+      erg.geo = { ...gemOrt, genauigkeit: 'ort' };
     }
   } catch (e) {
     erg.fehler = String(e instanceof Error ? e.message : e);

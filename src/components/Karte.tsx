@@ -12,6 +12,8 @@ export interface KartenPunkt {
   farbe: string;
   /** Favorit von mindestens einer Person: eigene Farbe */
   favorit?: boolean;
+  /** Neubauprojekt im Verkauf: eigener Pin (violett mit Haus-Symbol) */
+  neubau?: boolean;
   popupHtml?: string;
 }
 
@@ -42,7 +44,7 @@ function escape(s: string): string {
 function icon(p: KartenPunkt): L.DivIcon {
   return L.divIcon({
     className: 'pin-wrap',
-    html: '<span class="pin' + (p.genau ? '' : ' ungenau') + (p.favorit === true ? ' fav' : '') + '" style="--pin:' + p.farbe + '">' + escape(p.label) + '</span>',
+    html: '<span class="pin' + (p.genau ? '' : ' ungenau') + (p.favorit === true ? ' fav' : '') + (p.neubau === true ? ' neubau' : '') + '" style="--pin:' + p.farbe + '">' + escape(p.label) + '</span>',
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   });
@@ -98,7 +100,7 @@ export default function Karte({ punkte, hoehe, onVerschoben, onNavigieren, zoom 
     return () => { el.removeEventListener('click', klick); el.removeEventListener('pointerdown', benutzer); el.removeEventListener('wheel', benutzer); ro.disconnect(); m.remove(); karte.current = null; };
   }, []);
 
-  const schluessel = punkte.map((p) => p.id + ':' + p.lat.toFixed(5) + ':' + p.lng.toFixed(5) + ':' + p.label + ':' + p.farbe + ':' + (p.favorit === true ? 'f' : '') + ':' + (p.genau ? 'g' : 'u') + ':' + (p.popupHtml || '').length).join('|');
+  const schluessel = punkte.map((p) => p.id + ':' + p.lat.toFixed(5) + ':' + p.lng.toFixed(5) + ':' + p.label + ':' + p.farbe + ':' + (p.favorit === true ? 'f' : '') + (p.neubau === true ? 'n' : '') + ':' + (p.genau ? 'g' : 'u') + ':' + (p.popupHtml || '').length).join('|');
 
   useEffect(() => {
     const m = karte.current;
@@ -107,7 +109,7 @@ export default function Karte({ punkte, hoehe, onVerschoben, onNavigieren, zoom 
     g.clearLayers();
     const grenzen: L.LatLngExpression[] = [];
     punkte.forEach((p) => {
-      const marker = L.marker([p.lat, p.lng], { icon: icon(p), draggable: onVerschoben !== undefined, riseOnHover: true, title: p.label });
+      const marker = L.marker([p.lat, p.lng], { icon: icon(p), draggable: onVerschoben !== undefined, riseOnHover: true, title: p.label, zIndexOffset: p.neubau === true ? 500 : 0 });
       if (p.popupHtml) { marker.bindPopup(p.popupHtml, { maxWidth: 280, minWidth: 240 }); }
       if (onVerschoben !== undefined) {
         marker.on('dragend', () => {

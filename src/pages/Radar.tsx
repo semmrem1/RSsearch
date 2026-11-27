@@ -714,7 +714,7 @@ export default function Radar() {
               <span><i style={{ background: '#A4470B' }} />Kontakt sinnvoll</span>
               <span><i style={{ background: '#5E6670' }} />Geplant</span>
               <span><i style={{ background: '#1D5B84' }} />Vormerkung</span>
-              <span><i style={{ background: '#2F7D4F' }} />Im Verkauf</span>
+              <span><i className="neubau" />⌂ Im Verkauf (Preis ab)</span>
               <span>★ gemerkt</span>
               <span><i className="ungenau" />Gestrichelt: nur Ort bekannt</span>
             </div>
